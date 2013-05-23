@@ -1,11 +1,31 @@
 GoBot
------
+=====
+IRC Logging Bot written in Go.
 
 
-This is my second attempt at writing a IRC channel logger, esentially its the logbot repo refactored.
+Whats it for?
+-------------
+GoBot is basically a mashup of the awesome goirc libary (github.com/fluffle/goirc/)
+and redis client.. 
 
-I have included structs and method receivers which is an improvement in my opion
+Its primary function is to record a users lastseen timestamp (unix time) relative
+to the channels timestamp as well as the IRC channel conversation its assigned to.
 
-If anything this serves as a good? example on using the lovely goirc library and redis client.
+Channel messages addressed to GoBot are interpereted as commands and not recorded
+as part of the channels logged conversation.
 
+Messages not addressed to GoBot are recorded using a Redis Sorted Set whose message score is the timedelta
+of the current time minus the start of the logging in the channel (uptime).
+
+Messages are set to expire 72 hours after they are logged so as not to eat up RAM/disk.
+
+Commands
+--------
+
+GoBot command arg1 arg2
+
+
+HELP
+===
+Display the help message
 
