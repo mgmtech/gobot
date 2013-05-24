@@ -1,10 +1,10 @@
 GoBot
------
-IRC Bot written in Go.
+=====
+IRC Logging Bot written in Go.
 
 
 Whats it for?
-============
+-------------
 GoBot is basically a mashup of the awesome goirc libary (github.com/fluffle/goirc/)
 and redis client.. 
 
@@ -17,6 +17,7 @@ as part of the channels logged conversation.
 Messages not addressed to GoBot are recorded using a Redis Sorted Set whose message score is the timedelta
 of the current time minus the start of the logging in the channel (uptime).
 
+Messages are set to expire 72 hours after they are logged so as not to eat up RAM/disk.
 
 Commands
 --------
@@ -27,11 +28,4 @@ GoBot command arg1 arg2
 HELP
 ===
 Display the help message
-
-HISTORY
-======
-#shows history
-
-LASTSEEN
-########
 
