@@ -233,8 +233,6 @@ func (ch *IrcChannelLogger) start() {
 // Define IRC handlers
 func (ch *IrcChannelLogger) namesChan(conn *irc.Conn, line *irc.Line) {
     log.Print("User list: ", line, conn)
-    log.Print(line.Nick + " has quit")
-	ch.user_left(line.Nick)
 }
 
 func (ch *IrcChannelLogger) quitChan(conn *irc.Conn, line *irc.Line) {
