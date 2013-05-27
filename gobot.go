@@ -258,7 +258,7 @@ func (ch *IrcChannelLogger) start() {
 	ch.client.AddHandler(part, ch.partChan)
 	ch.client.AddHandler(quit, ch.quitChan)
 
-    if err := ch.client.Connect(fmt.Sprintf("%s:%s", ch.host, ch.port)); err != nil {
+    if err := ch.client.Connect(fmt.Sprintf("%s:%d", ch.host, ch.port)); err != nil {
 		log.Println("Failed to connect to the IRC Server: "+ch.host+" the error was: ", err)
 		return
 	}
