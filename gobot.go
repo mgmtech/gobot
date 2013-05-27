@@ -70,8 +70,8 @@ LASTSAW - Show users last seen timestamp`
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 			return "LASTSAW [user] - Display the user lastseen timestamp, nick of user sending by default."
 		},
-		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { return fmt.Sprintf("%s last saw %s UNIX timestamp", line.Nick, ch.lastseenstr(line.Nick)) },
-		1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { return fmt.Sprintf("you were last seen %s UNIX timestamp", ch.lastseenstr(args[0])) },
+		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { return fmt.Sprintf("%s, last saw you %s UNIX timestamp", line.Nick, ch.lastseenstr(line.Nick)) },
+		1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { return fmt.Sprintf("%s was last seen %s UNIX timestamp", args[0], ch.lastseenstr(args[0])) },
 	},
 	"TIMESTAMP": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { 
@@ -154,10 +154,6 @@ func (ch *IrcChannelLogger) lastseenstr(user string) string {
     return strconv.FormatInt(ch.lastseen(user), 10)
 }
 
-func (ch *IrcChannelLogger) userList () {
-    ch.client.Raw("NAMES " + ch.name)
-}
-
 func (ch *IrcChannelLogger) multilineMsg(msg string) {
 	// parse a multiline message and remit to channel
 	for i, v := range strings.Split(msg, "\n") {
@@ -187,7 +183,7 @@ func (ch *IrcChannelLogger) command(command string, args []string, line *irc.Lin
     // handle the special case for the help command to avoid initialization loop
     // in command map
     if command == "HELP" && len(args) == 1 {
-        if _, cmdOk := botCommand[args[0]]; cmdOk != true {
+        if _, cmdOk := botCommand[strings.ToUpper(args[0])]; cmdOk != true {
             log.Println("Invalid command")
             return "Invalid command"
         } else {
@@ -215,6 +211,7 @@ func (ch IrcChannelLogger) timestampstr() string {
 func (ch *IrcChannelLogger) start() {
 	ch.client = irc.SimpleClient(botname)
 	ch.client.SSL = false
+    ch.client.EnableStateTracking()
 
 	log.Print("Starting " + ch.name + " channel logger")
 
@@ -223,7 +220,6 @@ func (ch *IrcChannelLogger) start() {
 	ch.client.AddHandler(pmsg, ch.privMsg)
 	ch.client.AddHandler(part, ch.partChan)
 	ch.client.AddHandler(quit, ch.quitChan)
-    ch.client.AddHandler(names, ch.namesChan)
 
 	if err := ch.client.Connect(ch.host); err != nil {
 		log.Println("Failed to connect to the IRC Server: "+ch.host+" the error was: ", err)
@@ -243,10 +239,6 @@ func (ch *IrcChannelLogger) start() {
 }
 
 // Define IRC handlers
-func (ch *IrcChannelLogger) namesChan(conn *irc.Conn, line *irc.Line) {
-    log.Print("User list: ", line, conn)
-}
-
 func (ch *IrcChannelLogger) quitChan(conn *irc.Conn, line *irc.Line) {
 	log.Print(line.Nick + " has quit")
 	ch.user_left(line.Nick)
@@ -277,7 +269,12 @@ func (ch *IrcChannelLogger) joinChan(conn *irc.Conn, line *irc.Line) {
 		ch.time = time.Now().Unix()
 		ch.redis.Set(chKey, []byte(strconv.FormatInt(ch.time, 10)))
 	}
-    ch.userList()
+
+    // Build initial list of users in channel
+    for _, user := range conn.ST.GetChannel(ch.name).NicksStr() {
+        log.Print("Recording " + user + " timestamp\n")
+        ch.user_left(user)
+    }
 }
 
 func (ch *IrcChannelLogger) connectIRC(conn *irc.Conn, line *irc.Line) {
@@ -315,9 +312,6 @@ func (ch *IrcChannelLogger) privMsg(conn *irc.Conn, line *irc.Line) {
 		args = parts[2:]
 	}
 
-    for i, v := range args {
-        args[i] = strings.ToUpper(v)
-        }
 	command := strings.ToUpper(parts[1])
 
 	log.Printf("Command received: %s and arguments(%d): %s", command, len(args), args)
