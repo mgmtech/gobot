@@ -42,7 +42,11 @@ Commands are structured in a map[string][int] of functions which return a string
 
 */
 var botCommand = map[string]map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
-	"HELP": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+	"DIE": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { return "Whatchoo ¿awkin` bought wilis¿" },
+		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {  <- ch.quit; return "l8tr" },
+    },
+    "HELP": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 			return `
 command [arg1] [arg2]
@@ -254,7 +258,7 @@ func (ch *IrcChannelLogger) start() {
 	ch.client.AddHandler(part, ch.partChan)
 	ch.client.AddHandler(quit, ch.quitChan)
 
-	if err := ch.client.Connect(ch.host); err != nil {
+    if err := ch.client.Connect(fmt.Sprintf("%s:%S", ch.host + ":" + string(ch.port))); err != nil {
 		log.Println("Failed to connect to the IRC Server: "+ch.host+" the error was: ", err)
 		return
 	}
@@ -363,7 +367,7 @@ func main() {
 	cc := IrcChannelLogger{
 		name:   "#" + botname,
 		host:   "127.0.0.1",
-		port:   6667,
+		port:   6669,
 		nick:   botname,
 		ssl:    false,
 		listen: true,
