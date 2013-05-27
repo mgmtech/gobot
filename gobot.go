@@ -53,7 +53,8 @@ LASTSAW - Show users last seen timestamp`
 			return "HELP command - Show help for the command."
 		},
 		1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
-           return "" // Initialization loop, break out into function or initialize a helpmap from -1 indexes. botCommand[args[0]][-1](ch, args, line)
+           return "*special case* you shouldnt be here.." // The channel logger should handle this special case as self referenceing is not allowed
+           //due to Initialization loop, break out into function or initialize a helpmap from -1 indexes. botCommand[args[0]][-1](ch, args, line)
         },
 	},
 	"HISTORY": map[int]func(*IrcChannelLogger, []string, *irc.Line) string {
@@ -69,8 +70,8 @@ LASTSAW - Show users last seen timestamp`
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 			return "LASTSAW [user] - Display the user lastseen timestamp, nick of user sending by default."
 		},
-		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { return ch.lastseenstr(line.Nick) },
-		1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { return ch.lastseenstr(args[0]) },
+		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { return fmt.Sprintf("%s last saw %s UNIX timestamp", line.Nick, ch.lastseenstr(line.Nick)) },
+		1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { return fmt.Sprintf("you were last seen %s UNIX timestamp", ch.lastseenstr(args[0])) },
 	},
 	"TIMESTAMP": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { 
@@ -82,7 +83,6 @@ LASTSAW - Show users last seen timestamp`
         },
     },
 }
-
 
 /* github post-receive stuff, trying to keep it close together
 until I learn about module and restructure it out of this file */
@@ -151,7 +151,7 @@ func (ch *IrcChannelLogger) lastseen(user string) int64 {
 }
 
 func (ch *IrcChannelLogger) lastseenstr(user string) string {
-	return string(ch.lastseen(user))
+    return strconv.FormatInt(ch.lastseen(user), 10)
 }
 
 func (ch *IrcChannelLogger) userList () {
@@ -172,7 +172,6 @@ func (ch *IrcChannelLogger) command(command string, args []string, line *irc.Lin
 	// Prob not a bad idea to do some upper bounds checking to avoid overflow?
 	cmdMap, cmdok := botCommand[command]
 	_, argok := cmdMap[len(args)]
-
 	log.Printf("Command(%s) ok? %v ", command, cmdok)
 	log.Printf("Arguments(%s) length(%d) ok? %v ", args, len(args), argok)
 
@@ -185,10 +184,23 @@ func (ch *IrcChannelLogger) command(command string, args []string, line *irc.Lin
 			"Wrong Number of arguments. \n %s", botCommand[command][-1](ch, []string{}, line))
 	}
 
+    // handle the special case for the help command to avoid initialization loop
+    // in command map
+    if command == "HELP" && len(args) == 1 {
+        if _, cmdOk := botCommand[args[0]]; cmdOk != true {
+            log.Println("Invalid command")
+            return "Invalid command"
+        } else {
+            log.Print("Displaying HELP for command ", args[0])
+            return botCommand[strings.ToUpper(args[0])][-1](ch, []string{}, line)
+        }
+           
+    }
+    
     rMsg := botCommand[command][len(args)](ch, args, line)
 
     log.Printf("Received (%s) from command %s with args %s", rMsg, command, args)
-    
+   
     return rMsg
 }
 
@@ -303,6 +315,9 @@ func (ch *IrcChannelLogger) privMsg(conn *irc.Conn, line *irc.Line) {
 		args = parts[2:]
 	}
 
+    for i, v := range args {
+        args[i] = strings.ToUpper(v)
+        }
 	command := strings.ToUpper(parts[1])
 
 	log.Printf("Command received: %s and arguments(%d): %s", command, len(args), args)
