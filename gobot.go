@@ -30,6 +30,8 @@ const (
 	// redis key suffixes
 	sfxLast  = ":lastseen"
 	sfxStart = ":starttime"
+
+    msgDate = "1/2/06 15:04:05"
 )
 
 /* 
@@ -63,7 +65,16 @@ LASTSAW - Show users last seen timestamp`
 		},
 		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 			// retrieve missed messages here and remit as multi-line string.
-			return ""
+            rVal := ch.messages(
+               int(ch.lastseen(line.Nick)), //start score
+               int(ch.timestamp()))        // end score
+
+            log.Printf("%v", rVal)
+
+            var msg string
+            for _, v := range rVal { msg += string(v) }
+            
+            return msg
 		},
 	},
 	"LASTSAW": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
@@ -125,18 +136,19 @@ type IrcUser struct {
 }
 
 type IrcChannelLogger struct {
-	name   string // The name of the channel
-	time   int64  // The unix time that the logging started
-	host   string // The hostname of the IRC server
-	port   int16  // The port number of the IRC service
-	nick   string // The bots nickname to use
-	ssl    bool   // SSL?
-	listen bool   // Listen for commands
+	name        string // The name of the channel
+	time        int64  // The unix time that the logging started
+	host        string // The hostname of the IRC server
+	port        int16  // The port number of the IRC service
+	nick        string // The bots nickname to use
+	ssl         bool   // SSL?
+	listen      bool   // Listen for commands
+    initialized bool // Channel initialized?
 
-	members []IrcUser    // A list of IrcUsers in the channel
-	client  *irc.Conn    // The IRC Client for the channel
-	redis   redis.Client // The redis client connection
-	quit    chan bool    // A channel to signal close
+	members     []IrcUser    // A list of IrcUsers in the channel
+	client      *irc.Conn    // The IRC Client for the channel
+	redis       redis.Client // The redis client connection
+	quit        chan bool    // A channel to signal close
 }
 
 func (ch *IrcChannelLogger) user_left(user string) {
@@ -148,6 +160,27 @@ func (ch *IrcChannelLogger) lastseen(user string) int64 {
 	i, _ := strconv.ParseInt(string(v), 10, 64)
     log.Printf("Last seen for user %s was %d", user, i)
 	return i
+}
+
+func (ch *IrcChannelLogger) missed(user string) int32 {
+    value, err := ch.redis.Zrangebyscore(ch.name, float64(ch.lastseen(user)), float64(ch.timestamp()))
+    if err != nil {
+        log.Printf("Error was %v, value is %v", err, value)
+    } else {
+        return 0
+    }
+    return -1
+}
+
+func (ch *IrcChannelLogger) messages (start, end int) string {
+    rVal, err := ch.redis.Zrangebyscore(ch.name, float64(start), float64(end))
+    
+    log.Printf("%v Message retrived", len(rVal))
+    if err != nil {
+        return fmt.Sprintf("Problem geting messages: %s %s (err = %v, %v)", start, end, err, rVal)
+    } else {
+        return string (bytes.Join(rVal, []byte{'\n'}))
+    }
 }
 
 func (ch *IrcChannelLogger) lastseenstr(user string) string {
@@ -270,10 +303,13 @@ func (ch *IrcChannelLogger) joinChan(conn *irc.Conn, line *irc.Line) {
 		ch.redis.Set(chKey, []byte(strconv.FormatInt(ch.time, 10)))
 	}
 
-    // Build initial list of users in channel
-    for _, user := range conn.ST.GetChannel(ch.name).NicksStr() {
-        log.Print("Recording " + user + " timestamp\n")
-        ch.user_left(user)
+    if ch.initialized == false {
+        // Build initial list of users in channel
+        for _, user := range conn.ST.GetChannel(ch.name).NicksStr() {
+            log.Print("Recording " + user + " timestamp\n")
+            ch.user_left(user)
+        }
+        ch.initialized = true
     }
 }
 
@@ -298,7 +334,9 @@ func (ch *IrcChannelLogger) privMsg(conn *irc.Conn, line *irc.Line) {
 
 		// log the message with timestamp to redis
 		ch.redis.Zadd(ch.name, float64(
-			ch.timestamp()), []byte(line.Nick+":"+line.Args[1]))
+			ch.timestamp()), []byte(fmt.Sprintf(
+                "%v> %s: %s", time.Now().Format(msgDate),
+                line.Nick, line.Args[1])))
 		return
 	}
 
