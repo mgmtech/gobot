@@ -134,11 +134,6 @@ func (repo GitRepo) diff(commit string) string {
 
 /* End Git Module */
 
-type IrcUser struct {
-	nick string // The nickname of the IRC user
-	last int64  // The unixtime the user was last seen relative to the Channel start
-}
-
 type IrcChannelLogger struct {
 	name        string // The name of the channel
 	time        int64  // The unix time that the logging started
@@ -149,25 +144,28 @@ type IrcChannelLogger struct {
 	listen      bool   // Listen for commands
     initialized bool // Channel initialized?
 
-	members     []IrcUser    // A list of IrcUsers in the channel
 	client      *irc.Conn    // The IRC Client for the channel
 	redis       redis.Client // The redis client connection
 	quit        chan bool    // A channel to signal close
 }
 
+
+func (ch *IrcChannelLogger) rkey() string { return fmt.Sprintf("%s:%d:%s:", ch.host, ch.port, ch.name) }
+func (ch *IrcChannelLogger) ukey(user string) string { return fmt.Sprintf("%s%s", ch.rkey(), user) }
+
 func (ch *IrcChannelLogger) user_left(user string) {
-	ch.redis.Set(ch.name+":"+user+sfxLast, []byte(ch.timestampstr()))
+    ch.redis.Set(ch.ukey(user) + sfxLast, []byte(ch.timestampstr()))
 }
 
 func (ch *IrcChannelLogger) lastseen(user string) int64 {
-	v, _ := ch.redis.Get(ch.name + ":" + user + sfxLast)
+	v, _ := ch.redis.Get(ch.ukey(user) + sfxLast)
 	i, _ := strconv.ParseInt(string(v), 10, 64)
     log.Printf("Last seen for user %s was %d", user, i)
 	return i
 }
 
 func (ch *IrcChannelLogger) missed(user string) int32 {
-    value, err := ch.redis.Zrangebyscore(ch.name, float64(ch.lastseen(user)), float64(ch.timestamp()))
+    value, err := ch.redis.Zrangebyscore(ch.rkey(), float64(ch.lastseen(user)), float64(ch.timestamp()))
     if err != nil {
         log.Printf("Error was %v, value is %v", err, value)
     } else {
@@ -177,7 +175,7 @@ func (ch *IrcChannelLogger) missed(user string) int32 {
 }
 
 func (ch *IrcChannelLogger) messages (start, end int) string {
-    rVal, err := ch.redis.Zrangebyscore(ch.name, float64(start), float64(end))
+    rVal, err := ch.redis.Zrangebyscore(ch.rkey(), float64(start), float64(end))
     
     log.Printf("%v Message retrived", len(rVal))
     if err != nil {
@@ -191,15 +189,27 @@ func (ch *IrcChannelLogger) lastseenstr(user string) string {
     return strconv.FormatInt(ch.lastseen(user), 10)
 }
 
-func (ch *IrcChannelLogger) multilineMsg(msg string) {
+// TODO: refactor this duplicate code, allow it to respond to a different channel/person 
+func (ch *IrcChannelLogger) multilineMsg(msg, dest string){
 	// parse a multiline message and remit to channel
 	for i, v := range strings.Split(msg, "\n") {
 		if i == 0 && v == "" { // Skip leading blank lines
         continue
 		}
-		ch.client.Privmsg(ch.name, v)
+		ch.client.Privmsg(dest, v)
 	}
 }
+
+func (ch *IrcChannelLogger) noticemultilineMsg(msg, dest string) {
+	// parse a multiline message and remit to channel
+	for i, v := range strings.Split(msg, "\n") {
+		if i == 0 && v == "" { // Skip leading blank lines
+        continue
+		}
+		ch.client.Notice(dest, v)
+	}
+}
+// end TODO
 
 func (ch *IrcChannelLogger) command(command string, args []string, line *irc.Line) string {
 	// Prob not a bad idea to do some upper bounds checking to avoid overflow?
@@ -250,7 +260,7 @@ func (ch *IrcChannelLogger) start() {
 	ch.client.SSL = false
     ch.client.EnableStateTracking()
 
-	log.Print("Starting " + ch.name + " channel logger")
+	log.Print("Starting " + ch.rkey() + " channel logger")
 
 	ch.client.AddHandler(irc.CONNECTED, ch.connectIRC)
 	ch.client.AddHandler(join, ch.joinChan)
@@ -275,6 +285,14 @@ func (ch *IrcChannelLogger) start() {
 	<-ch.quit
 }
 
+func (ch *IrcChannelLogger) recTime (conn *irc.Conn) {
+    // Build initial list of users in channel
+    for _, user := range conn.ST.GetChannel(ch.name).NicksStr() {
+        log.Print("Recording " + user + " timestamp\n")
+        ch.user_left(user)
+    }
+}
+
 // Define IRC handlers
 func (ch *IrcChannelLogger) quitChan(conn *irc.Conn, line *irc.Line) {
 	log.Print(line.Nick + " has quit")
@@ -290,31 +308,40 @@ func (ch *IrcChannelLogger) partChan(conn *irc.Conn, line *irc.Line) {
 }
 
 func (ch *IrcChannelLogger) joinChan(conn *irc.Conn, line *irc.Line) {
-
-	var chKey = ch.name + sfxStart
+    // This function should only record the channelstart if the botname joins.
+	var chKey = ch.rkey() + sfxStart
 
 	log.Printf(line.Nick+" has joined the %s channel", ch.name)
 
-	channelStart, _ := ch.redis.Get(chKey)
+    if (line.Nick == ch.nick) {
+        log.Printf(
+            "Gobot joined channel %v, recording all traffic and lastseen", ch.name)
+        channelStart, _ := ch.redis.Get(chKey)
 
-	iStart, _ := strconv.ParseInt(string(channelStart), 10, 64)
-	log.Print("Channel start: ", iStart)
+        iStart, _ := strconv.ParseInt(string(channelStart), 10, 64)
+        log.Print("Channel start: ", iStart)
 
-	if iStart > 0 {
-		ch.time = iStart
-	} else {
-		ch.time = time.Now().Unix()
-		ch.redis.Set(chKey, []byte(strconv.FormatInt(ch.time, 10)))
-	}
-
-    if ch.initialized == false {
-        // Build initial list of users in channel
-        for _, user := range conn.ST.GetChannel(ch.name).NicksStr() {
-            log.Print("Recording " + user + " timestamp\n")
-            ch.user_left(user)
+        if iStart > 0 {
+            log.Printf("I've been here before, my lasttime is %v", ch.time)
+            ch.time = iStart
+        } else {
+            log.Printf(
+                "I have no recollection of this place(%v) logging time.", ch.time)
+            ch.time = time.Now().Unix()
+            ch.redis.Set(chKey, []byte(strconv.FormatInt(ch.time, 10)))
         }
-        ch.initialized = true
     }
+    if ch.initialized == false {
+        log.Printf(
+            "I have no recollection of these people here(%v).", ch.name)
+
+        // Build initial list of users in channel
+        ch.recTime(conn)
+        ch.initialized = true
+    } else {
+        ch.user_left(line.Nick) // Not really but record the time anyway
+    }
+
 }
 
 func (ch *IrcChannelLogger) connectIRC(conn *irc.Conn, line *irc.Line) {
@@ -323,55 +350,70 @@ func (ch *IrcChannelLogger) connectIRC(conn *irc.Conn, line *irc.Line) {
 }
 
 func (ch *IrcChannelLogger) privMsg(conn *irc.Conn, line *irc.Line) {
-	parts := strings.Fields(line.Args[1])
-	if len(parts) < 1 {
-		return
-	}
+    source := line.Args[0]
+    parts  := strings.Fields(line.Args[1])
+    target := parts[0]
 
-	target := strings.ToLower(parts[0])
+    // Log the message
+    log.Printf("Message received: %s, source: %s, nick: %s, channel: %s", 
+        line.Args[1],
+        source,
+        ch.nick,
+        ch.name)
 
-	args := []string{}
+    // log the message with timestamp to redis
+    ch.redis.Zadd(ch.rkey(), float64(
+        ch.timestamp()), []byte(fmt.Sprintf(
+            "%v> %s: %s", time.Now().Format(msgDate),
+            line.Nick, line.Args[1])))
 
-	// if the botname wasnt the first word received
-	if target != strings.ToLower(ch.nick) {
-		log.Print("Message received: " + line.Args[1])
+    log.Printf("privmsg function, source(%v) parts(%v) ", source, parts)
+    if len(parts) < 1 {
+        // wtf does this even do? when is it ever going to get called?? 
+		ch.quit <- true
+	} else if source == ch.nick || target == ch.nick {
+        /* 
+         If either the source of the message was for the tracked channel name 
+        or a private message to the bot, or in the channel saying the bots name.
+        
+        <<Process as a command >>
+        */
+        var dest string
+        var command string
+        var args []string
+        
+        // check for a source match, if so send a command with args
+        // if a target match ..
+        if source == ch.nick { 
+            command = strings.ToUpper(parts[0])
+            args = parts[1:]
+            dest = line.Nick 
+        } else { 
+            command = strings.ToUpper(parts[1])
+            args = parts[2:] 
+            dest = ch.name
+        }
 
-		// log the message with timestamp to redis
-		ch.redis.Zadd(ch.name, float64(
-			ch.timestamp()), []byte(fmt.Sprintf(
-                "%v> %s: %s", time.Now().Format(msgDate),
-                line.Nick, line.Args[1])))
-		return
-	}
-
-	// if its just the logbots name, do nothing. return help?
-	if len(parts) <= 1 {
-		ch.client.Privmsg(ch.name, line.Nick)
-		return
-	} else if len(parts) == 2 {
-		args = []string{}
-	} else {
-		args = parts[2:]
-	}
-
-	command := strings.ToUpper(parts[1])
-
-	log.Printf("Command received: %s and arguments(%d): %s", command, len(args), args)
-
-	ch.multilineMsg(ch.command(command, args, line))
+        log.Printf("Command received: %s and arguments(%d): %s", command, len(args), args)
+        go ch.multilineMsg(ch.command(command, args, line), dest)
+    }
 }
 
 func main() {
 
+    // remote shutdown to avoid embarrassing moments ;)
+    mainquit := make(chan bool)
+
 	// Join the command/control server
 	cc := IrcChannelLogger{
-		name:   "#" + botname,
+		name:   "#flashnotes-dev",// + botname,
 		host:   "127.0.0.1",
-		port:   6669,
+		port:   6667,
 		nick:   botname,
 		ssl:    false,
 		listen: true,
 	}
 
 	cc.start()
+    <- mainquit
 }
