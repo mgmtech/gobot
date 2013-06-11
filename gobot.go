@@ -13,7 +13,6 @@ import (
 	"text/template"
 	"time"
     "net/http"
-    "html"
 
 	redis "github.com/alphazero/Go-Redis"
 	irc "github.com/fluffle/goirc/client"
@@ -368,6 +367,7 @@ func (ch *IrcChannelLogger) privMsg(conn *irc.Conn, line *irc.Line) {
 
 func main() {
 
+    msgChan := make(chan string)
     // remote shutdown to avoid embarrassing moments ;)
     mainquit := make(chan bool)
 
@@ -375,7 +375,7 @@ func main() {
 	cc := IrcChannelLogger{
 		name:   "#flashnotes-dev",// + botname,
 		host:   "127.0.0.1",
-		port:   6669,
+		port:   6667,
 		nick:   botname,
 		ssl:    false,
 		listen: true,
@@ -423,15 +423,26 @@ func (repo GitRepo) diff(commit string) string {
 func PostReceive(w http.ResponseWriter, r *http.Request) {
     log.Printf("Incoming from github %v", r)
 
-    payload := r.FormValue("payload")
-
-    log.Printf("Received github.com payload: %v", payload)
-    fmt.Fprintf(w, "Hello, %q", html.EscapeString(r.URL.Path))
+    //fmt.Fprintf(w, "Hello, %q", html.EscapeString(r.URL.Path))
 }
 
-func seteupGithooks() {
-    http.HandleFunc("/post-receive", PostReceive)
-    log.Fatal(http.ListenAndServe(":8085", nil))
+func (ch *IrcChannelLogger)seteupGithooks() {
+    msgChan := make(chan string)
+
+    http.HandleFunc("/post-receive", 
+        func(w http.ResponseWriter, r *http.Request) {
+            payload := r.FormValue("payload")
+            log.Printf("Received github.com payload %v", payload)
+
+            pusher := payload["pusher"]["name"]
+            ref := payload["ref"]
+
+            msg := string
+            fmt.Sprintf("%v has push to %v , include a diff link", pusher, ref)
+            ch.multilineMsg()
+        })
+
+        log.Fatal(http.ListenAndServe(":8085", nil))
 }
 /* End Git Module */
 
