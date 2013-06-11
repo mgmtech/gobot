@@ -12,6 +12,8 @@ import (
 	"strings"
 	"text/template"
 	"time"
+    "net/http"
+    "html"
 
 	redis "github.com/alphazero/Go-Redis"
 	irc "github.com/fluffle/goirc/client"
@@ -98,41 +100,6 @@ LASTSAW - Show users last seen timestamp`
         },
     },
 }
-
-/* github post-receive stuff, trying to keep it close together
-until I learn about module and restructure it out of this file */
-const (
-	githubTemplates = `
-        {{ define "git-url" }}http://www.github.com{{ end }}
-        {{ define "git-repo" }}{{ template "git-url" }}/{{ .user }}/{{ .name }}{{ end }}
-        {{ define "git-compare" }}{{ template "git-repo" }}/{{ .branch }}..{{ .commit }}{{ end }}`
-)
-
-// templates
-var tmplGit = template.Must(template.New("git").Parse(githubTemplates))
-
-type GitRepo struct {
-	name   string // The github repo name
-	user   string // The github user
-	branch string // The branch to diff against
-}
-
-func (repo GitRepo) String() string {
-	buff := bytes.NewBufferString("")
-
-	if err := tmplGit.ExecuteTemplate(buff, "git-url", repo); err != nil {
-		log.Print("Error executing template")
-		return "" // ERROR ! XXX: implement error handling fool
-	}
-
-	return fmt.Sprintf("%p", buff)
-}
-
-func (repo GitRepo) diff(commit string) string {
-	return ""
-}
-
-/* End Git Module */
 
 type IrcChannelLogger struct {
 	name        string // The name of the channel
@@ -414,6 +381,53 @@ func main() {
 		listen: true,
 	}
 
+    seteupGithooks()
 	cc.start()
     <- mainquit
 }
+
+
+/* github post-receive stuff, trying to keep it close together
+until I learn about module and restructure it out of this file */
+const (
+	githubTemplates = `
+        {{ define "git-url" }}http://www.github.com{{ end }}
+        {{ define "git-repo" }}{{ template "git-url" }}/{{ .user }}/{{ .name }}{{ end }}
+        {{ define "git-compare" }}{{ template "git-repo" }}/{{ .branch }}..{{ .commit }}{{ end }}`
+)
+
+// templates
+var tmplGit = template.Must(template.New("git").Parse(githubTemplates))
+
+type GitRepo struct {
+	name   string // The github repo name
+	user   string // The github user
+	branch string // The branch to diff against
+}
+
+func (repo GitRepo) String() string {
+	buff := bytes.NewBufferString("")
+
+	if err := tmplGit.ExecuteTemplate(buff, "git-url", repo); err != nil {
+		log.Print("Error executing template")
+		return "" // ERROR ! XXX: implement error handling fool
+	}
+
+	return fmt.Sprintf("%p", buff)
+}
+
+func (repo GitRepo) diff(commit string) string {
+	return ""
+}
+
+func PostReceive(w http.ResponseWriter, r *http.Request) {
+    fmt.Fprintf(w, "Hello, %q", html.EscapeString(r.URL.Path))
+}
+
+func seteupGithooks() {
+    http.HandleFunc("/post-receive", PostReceive)
+    log.Fatal(http.ListenAndServe(":8085", nil))
+}
+/* End Git Module */
+
+
