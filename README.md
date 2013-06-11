@@ -22,10 +22,4 @@ Messages are set to expire 72 hours after they are logged so as not to eat up RA
 Commands
 --------
 
-GoBot command arg1 arg2
-
-
-HELP
-===
-Display the help message
-
+GoBot help help
