@@ -381,7 +381,7 @@ func main() {
 		listen: true,
 	}
 
-    seteupGithooks()
+    go seteupGithooks()
 	cc.start()
     <- mainquit
 }
