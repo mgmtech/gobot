@@ -421,6 +421,7 @@ func (repo GitRepo) diff(commit string) string {
 }
 
 func PostReceive(w http.ResponseWriter, r *http.Request) {
+    log.Printf("Incoming from github %v", r)
     fmt.Fprintf(w, "Hello, %q", html.EscapeString(r.URL.Path))
 }
 
