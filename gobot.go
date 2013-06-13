@@ -251,7 +251,6 @@ func (ch *IrcChannelLogger) start() {
 	}
 
 	ch.redis = cli
-
 	<-ch.quit
 }
 
