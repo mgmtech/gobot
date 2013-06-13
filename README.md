@@ -30,5 +30,5 @@ Wish List
 Standard command structure and ability to easily wrap ZeroMq for command/control
 Pluggable architecture and bot registry to facilitate command/control
 
-A GoBot Army to do my bidding ;)
+A GoBot Army :construction_worker: to do my bidding :eyes: :see_no_evil:
 
