@@ -5,11 +5,12 @@ package main
 Parrot is a simple tool that reports pushes to a configured branch and provides
 a diff url on github.com
 
+Ideally this bot will connect up to clients from GoBot over an agreed upon config
+in the registry, GoBot will then receive replies with the payload into a dest
+channel
+
 */
 
-const (
-    gitdiffbranch = "develop"
-)
 import (
     "encoding/json"
     "bytes"
@@ -17,7 +18,14 @@ import (
     "fmt"
     "net/http"
     "text/template"
+
+	"strings"
+
 	zmq "github.com/pebbe/zmq3"
+)
+
+const (
+    gitdiffbranch = "develop"
 )
 
 /* Structs to map to the git post-receiver web hook payload */
@@ -95,56 +103,44 @@ func main() {
                 log.Println("Error unpacking json:", err)
             }
 
-            m.CompBranch = gitdifbranch
+            m.CompBranch = gitdiffbranch
             
             log.Printf("%v", m)
             log.Printf("%v pushed to github. %v -> %v repo %v", 
                 m.Commits[0].Author.Name, m.Before, m.After, m.Repository)
         })
+        lbbroker := &lbbroker_t{}
+        lbbroker.frontend, _ = zmq.NewSocket(zmq.ROUTER)
+        lbbroker.backend, _ = zmq.NewSocket(zmq.ROUTER)
+        defer lbbroker.frontend.Close()
+        defer lbbroker.backend.Close()
+        lbbroker.frontend.Bind(registry.Fend)
+        lbbroker.backend.Bind(registry.Bend)
 
-        log.Fatal(http.ListenAndServe(":8085", nil))
-}
+        for worker_nbr := 0; worker_nbr < NBR_WORKERS; worker_nbr++ {
+            go worker_task()
+        }
+        //  Queue of available workers
+        lbbroker.workers = make([]string, 0, 10)
 
+        go log.Fatal(http.ListenAndServe(":8085", nil))
+        //  Prepare reactor and fire it up
+        lbbroker.reactor = zmq.NewReactor()
+        lbbroker.reactor.AddSocket(lbbroker.backend, zmq.POLLIN,
+            func(e zmq.State) error { return handle_backend(lbbroker) })
+        lbbroker.reactor.Run(-1)
 
-	"os"
-	//"time"
-	"log"
-	"strings"
-)
-
-/* ZMQ */
-const (
-	NBR_CLIENTS  = 10
-	NBR_WORKERS  = 1
-	WORKER_READY = "\001" //  Signals worker is ready
-
-    FE_URL = "tcp://127.0.0.1:5555"
-	BE_URL = "ipc://backend.ipc"
-)
-
-/* GTK Webkit conversion */
-const (
-	DEST_FOLDER_PREFIX    = "/home/matt/Desktop/"
-	OUTPUT_FORMAT_DEFAULT = "png"
-)
-
-var url22 = "http://www.flashntoes.com"
-
-//  Our load-balancer structure, passed to reactor handlers
-type lbbroker_t struct {
-	frontend *zmq.Socket //  Listen to clients
-	backend  *zmq.Socket //  Listen to workers
-	workers  []string    //  List of ready workers
-	reactor  *zmq.Reactor
 }
 
 //  Worker using REQ socket to do load-balancing
-//
+// TODO: Utilize command map to screen and call commands for workers.
+// This function for parrot should only listen for configuration directives.
+// output should be to a pub/sub.
 func worker_task() {
 	var ret int = 1
 	worker, _ := zmq.NewSocket(zmq.REQ)
 	defer worker.Close()
-	worker.Connect(BE_URL)
+	worker.Connect(registry.Bend)
 
 	//  Tell broker we're ready for work
 	worker.SendMessage(WORKER_READY)
@@ -163,7 +159,6 @@ func worker_task() {
 			file := parts[1]
 			log.Printf("Conversion task accepted")
 			log.Printf("Converting url %v to file %v", url, file)
-            openUrl(url)
 		}
 
 		log.Printf("asd")
@@ -173,85 +168,41 @@ func worker_task() {
 			msg[len(msg)-1] = "FAIL"
 		}
 		worker.SendMessage(msg)
-        for gtk.EventsPending() == true {
-            gtk.MainIterationDo(false)
-            log.Print("Gtk Main Iteration Doing..")
-        }
 	}
 }
 
-func openUrl(url string) {
-	gtk.Init(nil)
-	window := gtk.NewWindow(gtk.WINDOW_TOPLEVEL)
-	window.SetTitle("Goburt")
-	window.Connect("destroy", gtk.MainQuit)
 
-	vbox := gtk.NewVBox(false, 1)
-
-	entry := gtk.NewEntry()
-	swin := gtk.NewScrolledWindow(nil, nil)
-	swin.SetPolicy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
-	swin.SetShadowType(gtk.SHADOW_IN)
-
-	webview := webkit.NewWebView()
-	webview.Connect("load-committed", func() {
-		entry.SetText(webview.GetUri())
-	})
-	webview.Connect("load-finished", func() {
-		// capture pnd and quit
-		log.Print("Outputting imag")
-		gtk.MainQuit()
-	})
-	swin.Add(webview)
-
-	vbox.Add(swin)
-	entry.SetText(url)
-	vbox.PackStart(entry, false, false, 0)
-	entry.Connect("activate", func() {
-		webview.LoadUri(entry.GetText())
-	})
-
-	window.Add(vbox)
-	window.SetSizeRequest(600, 800)
-	window.ShowAll()
-
-	proxy := os.Getenv("HTTP_PROXY")
-	if len(proxy) > 0 {
-		soup_uri := webkit.SoupUri(proxy)
-		webkit.GetDefaultSession().Set("proxy-uri", soup_uri)
-		soup_uri.Free()
-	}
-	entry.Emit("activate")
-	gtk.Main()
+func doWork(url string) {
+    // DO something here, like implement the actual functions/etc.
 }
 
-func main() {
-	lbbroker := &lbbroker_t{}
-	lbbroker.frontend, _ = zmq.NewSocket(zmq.ROUTER)
-	lbbroker.backend, _ = zmq.NewSocket(zmq.ROUTER)
-	defer lbbroker.frontend.Close()
-	defer lbbroker.backend.Close()
-	lbbroker.frontend.Bind(FE_URL)
-	lbbroker.backend.Bind(BE_URL)
 
-	// Client requests
-	//	for client_nbr := 0; client_nbr < NBR_CLIENTS; client_nbr++ {
-	//		go client_task()
-	//	}
+// TODO: Initialize entry from centralized registry.
 
-	for worker_nbr := 0; worker_nbr < NBR_WORKERS; worker_nbr++ {
-		go worker_task()
-	}
+var commands map[string]map[int]func()interface{}
 
-	//  Queue of available workers
-	lbbroker.workers = make([]string, 0, 10)
+type RegEntry struct {
+    Fend string
+    Bend string
+    Name string
+    Port int16
+}
 
-	//  Prepare reactor and fire it up
-	lbbroker.reactor = zmq.NewReactor()
-	lbbroker.reactor.AddSocket(lbbroker.backend, zmq.POLLIN,
-		func(e zmq.State) error { return handle_backend(lbbroker) })
-	lbbroker.reactor.Run(-1)
+var registry = RegEntry{ Fend: "tcp://127.0.0.1:556", Bend: "ipc://parrotbackend.ipc", Name: "parrot", Port: 556}
 
+/* ZMQ */
+const (
+	NBR_CLIENTS  = 10
+	NBR_WORKERS  = 1
+	WORKER_READY = "\001" //  Signals worker is ready
+)
+
+//  Our load-balancer structure, passed to reactor handlers
+type lbbroker_t struct {
+	frontend *zmq.Socket //  Listen to clients
+	backend  *zmq.Socket //  Listen to workers
+	workers  []string    //  List of ready workers
+	reactor  *zmq.Reactor
 }
 
 //  In the reactor design, each time a message arrives on a socket, the
