@@ -1,0 +1,11 @@
+
+Version .1 05/12/13
+----------
+
+Message Logging and redis sorted set
+
+
+Version .2 06/15/13
+-------------------
+
+Including sub-bots (GoBots) and including a registry for them
