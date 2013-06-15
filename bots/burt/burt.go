@@ -2,7 +2,7 @@ package main
 
 /*
 
-GoBurt is a Basic Url Tranformation using Matz GtkWebKit go library and zeromq
+Burt is a Basic Url Tranformation using Matz GtkWebKit go library and zeromq
 
 This the first bot that got me thinking about using a task registry and zeromq
 to wire up command and controlled bot which using various zermomq and native go
@@ -27,24 +27,21 @@ import (
 	"time"
 )
 
-/* ZMQ */
-const (
-	NBR_CLIENTS  = 10
-	NBR_WORKERS  = 1
-	WORKER_READY = "\001" //  Signals worker is ready
+import registry "github.com/mgmtech/gobot/bots"
 
-	FE_URL = "tcp://127.0.0.1:5555"
-	BE_URL = "ipc://backend.ipc"
-)
-
-/* GTK Webkit conversion */
-const (
-	DEST_FOLDER_PREFIX    = "/home/matt/Desktop/"
-	OUTPUT_FORMAT_DEFAULT = "png"
-)
-
-
-var url22 = "http://www.flashntoes.com"
+var Registry = registry.RegEntry{
+  	Name:     "burt",
+	Port:     557,
+    Fend:     "tcp://127.0.0.1:557",
+	Bend:     "ipc://burtbackend.ipc",
+	Commands: nil,
+	Settings: map[string]string{
+		"DESTFOLDERPREFIX":   "/home/matt/Desktop",
+        "OUTPUTFORMATDEFAULT": "png",
+	},
+    Workers: 1, // Not threadsafe
+    WorkerReady: "\001",
+}
 
 //  Our load-balancer structure, passed to reactor handlers
 type lbbroker_t struct {
@@ -56,7 +53,6 @@ type lbbroker_t struct {
 
 func retire_window(w *gtk.Window, chd chan bool) {
     <- chd
-    log.Print("asd")
     defer w.Emit("destroy")
 }
 //  Worker using REQ socket to do load-balancing
@@ -66,10 +62,10 @@ func worker_task () {
 	var ret int = 1
 	worker, _ := zmq.NewSocket(zmq.REQ)
 	defer worker.Close()
-	worker.Connect(BE_URL)
+	worker.Connect(Registry.Bend)
 
 	//  Tell broker we're ready for work
-	worker.SendMessage(WORKER_READY)
+	worker.SendMessage(Registry.WorkerReady)
 
 	//  Process messages as they arrive
 	for {
@@ -99,7 +95,7 @@ func worker_task () {
             worker_window.SetSizeRequest(600, 800)
             worker_window.ShowAll()
             defer worker_window.Emit("destroy")
-            
+
             gtk.MainIteration()
             log.Print("First Gtk Loop iteration complete, sending done")
 		}
@@ -109,7 +105,7 @@ func worker_task () {
 		} else {
 			msg[len(msg)-1] = "FAIL"
 		}
-        
+
         worker.SendMessage(msg)
 	}
 }
@@ -170,11 +166,11 @@ func main() {
 	lbbroker.backend, _ = zmq.NewSocket(zmq.ROUTER)
 	defer lbbroker.frontend.Close()
 	defer lbbroker.backend.Close()
-	lbbroker.frontend.Bind(FE_URL)
-	lbbroker.backend.Bind(BE_URL)
+	lbbroker.frontend.Bind(Registry.Fend)
+	lbbroker.backend.Bind(Registry.Bend)
 
-    
-	for worker_nbr := 0; worker_nbr < NBR_WORKERS; worker_nbr++ {
+
+	for worker_nbr := 0; worker_nbr < Registry.Workers; worker_nbr++ {
         go worker_task()
 	}
 
@@ -228,7 +224,7 @@ func handle_backend(lbbroker *lbbroker_t) error {
 	}
 
 	//  Forward message to client if it's not a READY
-	if msg[0] != WORKER_READY {
+	if msg[0] != Registry.WorkerReady {
 		lbbroker.frontend.SendMessage(msg)
 	}
 

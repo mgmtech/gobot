@@ -1,4 +1,4 @@
-package main
+package webvu 
 
 /*
 #include <stdio.h>
@@ -58,6 +58,21 @@ import (
 	"strings"
 )
 
+import registry "github.com/mgmtech/gobot/bots"
+
+var Registry = registry.RegEntry{
+  	Name:     "webvu",
+	Port:     558,
+    Fend:     "tcp://127.0.0.1:558",
+	Bend:     "ipc://webvubackend.ipc",
+	Commands: nil,
+	Settings: map[string]string{
+		"DESTFOLDERPREFIX":   "/home/matt/Desktop",
+        "OUTPUTFORMATDEFAULT": "png",
+	},
+    Workers: 1, // Not threadsafe
+    WorkerReady: "\001",
+}
 /*
 
 
@@ -66,34 +81,20 @@ wrapper around gtk-webkit-png
 
 */
 
-/* ZMQ */
-const (
-	NBR_CLIENTS  = 10
-	NBR_WORKERS  = 1      // NOT Thread safe!
-	WORKER_READY = "\001" //  Signals worker is ready
-)
-
-/* GTK Webkit conversion */
-const (
-	DEST_FOLDER_PREFIX    = "/home/matt/Desktop/"
-	OUTPUT_FORMAT_DEFAULT = "png"
-	frontend              = "ipc://frontend.ipc"
-	backend               = "ipc://backend.ipc"
-)
-
 func url2png(source string, destination string, format string) int {
 
 	log.Print("Calling GtkWebKit conversion task")
 	// I have serious doubts about thread safety here..
 	cSrc := C.CString(source)
-	cDst := C.CString(DEST_FOLDER_PREFIX + destination)
+	cDst := C.CString(Registry.Settings["DESTFOLDERPREFIX"] + destination)
 	cFmt := C.CString(format)
 
 	defer C.free(unsafe.Pointer(cSrc))
 	defer C.free(unsafe.Pointer(cDst))
 	defer C.free(unsafe.Pointer(cFmt))
 
-	log.Print("%v -> %v %v", source, DEST_FOLDER_PREFIX+destination, format)
+	log.Print("%v -> %v %v", source, 
+        Registry.Settings["DESTFOLDERPREFIX"] + destination, format)
 	return int(C.url2png(cSrc, cDst, cFmt))
 }
 
@@ -103,10 +104,10 @@ func main() {
 	lbbroker.backend, _ = zmq.NewSocket(zmq.ROUTER)
 	defer lbbroker.frontend.Close()
 	defer lbbroker.backend.Close()
-	lbbroker.frontend.Bind(frontend)
-	lbbroker.backend.Bind(backend)
+	lbbroker.frontend.Bind(Registry.Fend)
+	lbbroker.backend.Bind(Registry.Bend)
 
-	for worker_nbr := 0; worker_nbr < NBR_WORKERS; worker_nbr++ {
+	for worker_nbr := 0; worker_nbr < Registry.Workers; worker_nbr++ {
 		go worker_task()
 	}
 
@@ -128,10 +129,10 @@ func worker_task() {
 	var ret int = 1
 	worker, _ := zmq.NewSocket(zmq.REQ)
 	defer worker.Close()
-	worker.Connect(backend)
+	worker.Connect(Registry.Bend)
 
 	//  Tell broker we're ready for work
-	worker.SendMessage(WORKER_READY)
+	worker.SendMessage(Registry.WorkerReady)
 
 	//  Process messages as they arrive
 	for {
@@ -147,7 +148,7 @@ func worker_task() {
 			url := parts[0]
 			file := parts[1]
 			log.Printf("Conversion task accepted")
-			ret = url2png(url, file, OUTPUT_FORMAT_DEFAULT)
+			ret = url2png(url, file, Registry.Settings["OUTPUTFORMATDEFAULT"])
 		}
 
 		if ret != 1 {
@@ -206,7 +207,7 @@ func handle_backend(lbbroker *lbbroker_t) error {
 	}
 
 	//  Forward message to client if it's not a READY
-	if msg[0] != WORKER_READY {
+	if msg[0] != Registry.WorkerReady {
 		lbbroker.frontend.SendMessage(msg)
 	}
 

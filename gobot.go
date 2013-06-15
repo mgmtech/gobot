@@ -1,32 +1,32 @@
 package main
 
 /*
-    GoBot is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
+   GoBot is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
 
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 
 /*
-    GoBot is a mix-mash of various Golang libraries to facilitate yet another 
+    GoBot is a mix-mash of various Golang libraries to facilitate yet another
 IRC Bot, with sub-bots and a registry.. I chose this path as my first real Golang
 program as its something I find interesting at the moment (Irc)..
 
     Eventually GoBot should be able to start/stop the sub-bots and provides a
 central configuration method for them (the registry). The registry contains the
-appropriate channels, a commands map with contextual help, and settings related 
-to the bot.. This will hopefully allow adding/removing bots to be easy and pain 
+appropriate channels, a commands map with contextual help, and settings related
+to the bot.. This will hopefully allow adding/removing bots to be easy and pain
 free. GoBot uses ZeroMq to speak to its sub-bots, eventually by name these bots
-will be invoked using GoBot as their proxy. By virtue of ZeroMq there are a lot 
+will be invoked using GoBot as their proxy. By virtue of ZeroMq there are a lot
 os possible combinations and I am certain that things will be under heavy changes
 most of the time. Please use master for a running version (STABLE).
 
@@ -43,19 +43,44 @@ import (
 
 import redis "github.com/alphazero/Go-Redis"
 import irc "github.com/fluffle/goirc/client"
-import zmq "github.com/pebbe/zmq3"
+
+import registry "github.com/mgmtech/gobot/bots"
+
+// Import the bots
+import parrot "github.com/mgmtech/gobot/bots/parrot"
+import burt "github.com/mgmtech/gobot/bots/burt"
+import webvu "github.com/mgmtech/gobot/bots/webvu"
+
+// Declare the botmap
+var gobots = registry.BotRegistry{
+	"parrot": parrot.Registry,
+    "burt": burt.Registry,
+    "webvu": webvu.Registry,
+    }
+
+// Super-Hacky! setup SUBscription socket to parrot
+func (ch *IrcChannelLogger) listentoparrot() {
+
+    client := parrot.CliStart()
+    defer client.Close()
+    log.Print("conntecting to ", parrot.Registry.Bend)
+	for {
+		msg, _ := client.Recv(0)
+		log.Print("Git-parrot msg -> ", msg)
+		ch.multilineMsg(msg, ch.name)
+	}
+}
 
 const (
-    // bots
-    parrot = "ipc://parrotbackend.ipc"
+	// bots
 	botname string = "GoBot"
 
 	// irc commands
-	join string = "JOIN"
-	part  = "PART"
-	pmsg  = "PRIVMSG"
-	quit  = "QUIT"
-	names = "NAMES"
+	join  string = "JOIN"
+	part         = "PART"
+	pmsg         = "PRIVMSG"
+	quit         = "QUIT"
+	names        = "NAMES"
 
 	// redis key suffixes
 	sfxLast  = ":lastseen"
@@ -64,21 +89,6 @@ const (
 	msgDate = "1/2/06 15:04:05"
 )
 
-// Super-Hacky! setup SUBscription socket to parrot
-func (ch *IrcChannelLogger) listentoparrot() {
-    client, err := zmq.NewSocket(zmq.SUB)
-    client.Connect(parrot)
-    client.SetSubscribe("")
-    if (err != nil) { log.Fatal("Problem connection to front-end")}
-    log.Print("conntecting to ", parrot)
-    for {
-        msg, _ := client.Recv(0)
-        log.Print("Git-parrot msg -> ", msg)
-        ch.multilineMsg(msg, ch.name)
-
-    }
-    
-}
 type IrcChannelLogger struct {
 	name        string // The name of the channel
 	time        int64  // The unix time that the logging started
@@ -96,8 +106,7 @@ type IrcChannelLogger struct {
 
 /* Redis key helpers */
 func (ch *IrcChannelLogger) rkey() string            { return fmt.Sprintf("%s:%d:%s", ch.host, ch.port, ch.name) }
-func (ch *IrcChannelLogger) ukey(user string) string { return fmt.Sprintf("%s%s", ch.rkey(), user) }
-
+func (ch *IrcChannelLogger) ukey(user string) string { return fmt.Sprintf("%s:%s", ch.rkey(), user) }
 
 /*
 Bot commands and contextual help map
@@ -109,35 +118,35 @@ Commands are structured in a map[string][int] of functions which return a string
 var botCommand = map[string]map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 	"REDISCHECK": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
-	        return "REDISCHECK - Basic redis connection tests"
+			return "REDISCHECK - Basic redis connection tests"
 		},
 		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
-            _, ok := ch.redis.AllKeys()
-            return fmt.Sprintf("Redis All keys command stats: (%v)", ok == nil)
+			_, ok := ch.redis.AllKeys()
+			return fmt.Sprintf("Redis All keys command stats: (%v)", ok == nil)
 		},
 	},
 	"KEYS": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
-	        return "KEYS - Show the redis keys in play"
+			return "KEYS - Show the redis keys in play"
 		},
 		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
-            return fmt.Sprintf("Channel key is (%v) user key for GoBot is (%v), channel start (%v) -> %v %v",
-                ch.rkey(), ch.ukey("GoBot"), ch.rkey() + sfxLast, ch.rkey() + sfxStart, ch.time)
+			return fmt.Sprintf("Channel key is (%v) user key for GoBot is (%v), channel start (%v) -> %v %v",
+				ch.rkey(), ch.ukey("GoBot"), ch.rkey()+sfxLast, ch.rkey()+sfxStart, ch.time)
 		},
 	},
 	"VARS": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
-	        return "VARS - Show the channel configuration parameters"
+			return "VARS - Show the channel configuration parameters"
 		},
 		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
-            return fmt.Sprintf("Channel configuration (%v) ", ch)
+			return fmt.Sprintf("Channel configuration (%v) ", ch)
 		},
 	},
 	"DEATHKISS": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 			return "Whatchoo ¿awkin` bought wilis¿ you need to guess the magic number fool!"
 		},
-		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { ch.client.Quit(); return ""},
+		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { ch.client.Quit(); return "" },
 	},
 	"HELP": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
@@ -346,12 +355,12 @@ func (ch *IrcChannelLogger) recTime(conn *irc.Conn) {
 // Define IRC handlers
 func (ch *IrcChannelLogger) quitChan(conn *irc.Conn, line *irc.Line) {
 	log.Print(line.Nick + " has quit")
-    
-    if (line.Nick == ch.name) {
-        log.Print("Im dying!!!")
-        ch.redis.Quit()
-        ch.done <- true
-    }
+
+	if line.Nick == ch.name {
+		log.Print("Im dying!!!")
+		ch.redis.Quit()
+		ch.done <- true
+	}
 	ch.user_left(line.Nick)
 }
 
@@ -376,9 +385,9 @@ func (ch *IrcChannelLogger) joinChan(conn *irc.Conn, line *irc.Line) {
 
 		iStart, _ := strconv.ParseInt(string(channelStart), 10, 64)
 
-        if ch.time != 0 { // if it currently has channel time
-            return 
-        }  else if iStart > 0 {
+		if ch.time != 0 { // if it currently has channel time
+			return
+		} else if iStart > 0 {
 			log.Printf("I've been here before, my lasttime is %v", iStart)
 			ch.time = iStart
 		} else {
@@ -427,8 +436,9 @@ func (ch *IrcChannelLogger) privMsg(conn *irc.Conn, line *irc.Line) {
 	log.Printf("privmsg function, source(%v) parts(%v) ", source, parts)
 	if len(parts) < 1 {
 		// wtf does this even do? when is it ever going to get called??
+        log.Print("Hi")
 		ch.done <- true
-	} else if source == ch.nick || target == ch.nick {
+	} else if source == ch.nick || target == ch.nick && len(parts) > 0 {
 		/*
 		    If either the source of the message was for the tracked channel name
 		   or a private message to the bot, or in the channel saying the bots name.
@@ -445,14 +455,16 @@ func (ch *IrcChannelLogger) privMsg(conn *irc.Conn, line *irc.Line) {
 			command = strings.ToUpper(parts[0])
 			args = parts[1:]
 			dest = line.Nick
-		} else {
+		} else if target == ch.nick && len(parts) >= 2{
 			command = strings.ToUpper(parts[1])
 			args = parts[2:]
 			dest = ch.name
 		}
-
-		log.Printf("Command received: %s and arguments(%d): %s", command, len(args), args)
-		go ch.multilineMsg(ch.command(command, args, line), dest)
+        
+        if command != "" {
+            log.Printf("Command received: %s and arguments(%d): %s", command, len(args), args)
+            go ch.multilineMsg(ch.command(command, args, line), dest)
+        }
 	}
 }
 
@@ -460,16 +472,17 @@ func main() {
 
 	// Join the command/control server
 	cc := IrcChannelLogger{
-        name:   "#flashnotes-dev",
+		name:   "#flashnotes-dev",
 		host:   "127.0.0.1",
 		port:   6667,
 		nick:   botname,
 		ssl:    false,
 		listen: true,
-        done: make(chan bool),
+		done:   make(chan bool),
 	}
+
+    go parrot.SrvStart()
 
     go cc.listentoparrot()
 	cc.start()
-	<-cc.done
 }
