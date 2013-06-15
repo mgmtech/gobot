@@ -1,4 +1,37 @@
 package main
+
+/*
+    GoBot is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+*/
+
+/*
+    GoBot is a mix-mash of various Golang libraries to facilitate yet another 
+IRC Bot, with sub-bots and a registry.. I chose this path as my first real Golang
+program as its something I find interesting at the moment (Irc)..
+
+    Eventually GoBot should be able to start/stop the sub-bots and provides a
+central configuration method for them (the registry). The registry contains the
+appropriate channels, a commands map with contextual help, and settings related 
+to the bot.. This will hopefully allow adding/removing bots to be easy and pain 
+free. GoBot uses ZeroMq to speak to its sub-bots, eventually by name these bots
+will be invoked using GoBot as their proxy. By virtue of ZeroMq there are a lot 
+os possible combinations and I am certain that things will be under heavy changes
+most of the time. Please use master for a running version (STABLE).
+
+*/
+
 import (
 	"bytes"
 	"fmt"

@@ -1,15 +1,16 @@
 package main 
 
 /*
+ParrotBot
+---------
 
-Parrot is a simple tool that reports pushes to a configured branch and provides
-a diff url on github.com
-
-Ideally this bot will connect up to clients from GoBot over an agreed upon config
-in the registry, GoBot will then receive replies with the payload into a dest
-channel
-
+Parrot is a simple GoBot which uses ZeroMq to communicate using a Publisher socket
+, clients connect to the backend url as Subscribers. A repo configured to push 
+to this servers registry.Settings["GITPUSHPORT"] will have a message remitted and
+a compare link against registry.Settings["GITDIFFBRANCH"]. Eventually the settings
+may be expanded to contain a list of repos, and branches to diff against.
 */
+
 import (
     "encoding/json"
     "bytes"
@@ -24,24 +25,32 @@ import (
 
 // TODO: Initialize entry from centralized registry.
 
-var commands map[string]map[int]func()interface{}
+type commandMap map[string]map[int]func()interface{}
+type settings map[string]string
 
 type RegEntry struct {
     Fend string
     Bend string
     Name string
     Port int16
+    Commands commandMap
+    Settings settings
 }
 
+// parrot registry entry, as this does not respond to commands and does not have 
+// a request socket commands and Frontend is nil.
 var registry = RegEntry{ 
     Name: "parrot", 
     Port: 556,
-    Fend: "tcp://127.0.0.1:556", 
-    Bend: "ipc://parrotbackend.ipc"}
+    Fend: "", 
+    Bend: "ipc://parrotbackend.ipc",
+    Commands: nil,
+    Settings: map[string]  string{
+        "GITPUSHPORT": "8085",
+        "GITDIFFBRANCH": "develop",
+    },
+}
 
-const (
-    gitdiffbranch = "develop"
-)
 
 /* Structs to map to the git post-receiver web hook payload */
 type GitAuthor struct {
@@ -121,7 +130,7 @@ func main() {
                 log.Println("Error unpacking json:", err)
             }
 
-            m.CompBranch = gitdiffbranch
+            m.CompBranch = registry.Settings["GITDIFFBRANCH"]
             var resp_str = fmt.Sprintf("(parrot) %v pushed changes to %v, %v", 
                 m.Commits[0].Author.Name, m.Repository.Name, m)
            
@@ -129,7 +138,7 @@ func main() {
             client.Send(resp_str, 0)
         })
 
-        log.Fatal(http.ListenAndServe(":8085", nil))
+        log.Fatal(http.ListenAndServe(":" + registry.Settings["GITPUSHPORT"], nil))
 
 }
 
