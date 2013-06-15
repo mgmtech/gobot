@@ -25,6 +25,7 @@ static void on_finished (WebKitWebView      *view,
         gtk_main_quit();
 }
 
+
 int url2png (char *src, char *dst, char *fmt)
 {
         GtkWidget *window;
@@ -139,18 +140,17 @@ func worker_task() {
 			log.Printf("Worker encountered error %v", e)
 			break //  Interrupted
 		}
-
+        log.Printf("%v %v", msg ,e)
 		parts := strings.Split(msg[2], " ")
+        log.Printf("%v", parts)
 		if len(parts) == 2 {
 			url := parts[0]
 			file := parts[1]
 			log.Printf("Conversion task accepted")
-			log.Printf("Converting url %v to file %v", url, file)
 			ret = url2png(url, file, OUTPUT_FORMAT_DEFAULT)
 		}
 
-		log.Printf("asd")
-		if ret == 1 {
+		if ret != 1 {
 			msg[len(msg)-1] = "OK"
 		} else {
 			msg[len(msg)-1] = "FAIL"

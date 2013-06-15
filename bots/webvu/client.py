@@ -1,23 +1,34 @@
 frontend = "ipc://frontend.ipc"
 
 sites_test = [
-    ('http://www.google.com/', 'test1.png'),
-    ('http://www.flashnotes.com','test2.png'),
-    ('http://www.yahoo.com','test3.png'),
-    ('http://www.fsf.org','test4.png'),
+    'http://www.google.com/',
+    'http://www.flashnotes.com',
+    'http://www.msdn.com',
+    'http://www.yahoo.com',
+    'http://www.google.com/news',
+    'http://www.fsf.org',
+    'http://www.afitzgraphics.com',
+    'http://www.cocacola.com',
+    'http://www.elementalstudios.com',
+    'http://www.9gag.com',
+    'http://www.nasa.gov',
+    'http://www.ieee.org',
+    'http://www.cnn.com',
+    'http://redis.io',
+    'http://www.zeromq.org'
 ]
 
 
 import zmq
 context = zmq.Context()
 socket = context.socket(zmq.REQ)
-identity = "Client-1"
+identity = "Client-WebVu-Test"
 socket.setsockopt(zmq.IDENTITY, identity) #Set client identity. Makes tracing easier
 socket.connect(frontend)
 
-for k, v in sites_test:
-    print k
-    print v
-    socket.send("%s -> %s" % (k,v))
-    print socket.recv()
+c = 0
+for s in  sites_test:
+    socket.send("%s test%s" % (s, c))
+    print "{0} -> {1}".format(s, socket.recv())
+    c += 1
 

@@ -1,30 +1,30 @@
 package main
 
-/* 
+/*
 
 GoBurt is a Basic Url Tranformation using Matz GtkWebKit go library and zeromq
 
 This the first bot that got me thinking about using a task registry and zeromq
 to wire up command and controlled bot which using various zermomq and native go
-routines can easily scale. 
+routines can easily scale.
 
-1 issue is that most of this is not threadsafe so a process broker might be 
+1 issue is that most of this is not threadsafe so a process broker might be
 needed.
 
-Ideally a REQ-DEALER or REP-ROUTER pattern should be used, or the MT example 
-for a multi-threaded example. 
+Ideally a REQ-DEALER or REP-ROUTER pattern should be used, or the MT example
+for a multi-threaded example.
 
 */
 
 import (
-	"github.com/mattn/go-gtk/gtk"
+	gtk "github.com/mattn/go-gtk/gtk"
 	"github.com/mattn/go-webkit/webkit"
 	zmq "github.com/pebbe/zmq3"
 
-	"os"
-	//"time"
 	"log"
+	"os"
 	"strings"
+	"time"
 )
 
 /* ZMQ */
@@ -33,7 +33,7 @@ const (
 	NBR_WORKERS  = 1
 	WORKER_READY = "\001" //  Signals worker is ready
 
-    FE_URL = "tcp://127.0.0.1:5555"
+	FE_URL = "tcp://127.0.0.1:5555"
 	BE_URL = "ipc://backend.ipc"
 )
 
@@ -42,6 +42,7 @@ const (
 	DEST_FOLDER_PREFIX    = "/home/matt/Desktop/"
 	OUTPUT_FORMAT_DEFAULT = "png"
 )
+
 
 var url22 = "http://www.flashntoes.com"
 
@@ -53,9 +54,15 @@ type lbbroker_t struct {
 	reactor  *zmq.Reactor
 }
 
+func retire_window(w *gtk.Window, chd chan bool) {
+    <- chd
+    log.Print("asd")
+    defer w.Emit("destroy")
+}
 //  Worker using REQ socket to do load-balancing
 //
-func worker_task() {
+func worker_task () {
+    var chDone = make(chan bool)
 	var ret int = 1
 	worker, _ := zmq.NewSocket(zmq.REQ)
 	defer worker.Close()
@@ -74,33 +81,47 @@ func worker_task() {
 
 		parts := strings.Split(msg[2], " ")
 		if len(parts) == 2 {
+            // Gtk Initialize
+            gtk.Init(nil)
+
+            // Create new GTK Window
+            worker_window := gtk.NewWindow(gtk.WINDOW_TOPLEVEL)
+            worker_window.SetTitle("Goburt Worker " )
+            worker_window.Connect("destroy", gtk.MainQuit)
+
 			url := parts[0]
 			file := parts[1]
 			log.Printf("Conversion task accepted")
 			log.Printf("Converting url %v to file %v", url, file)
-            openUrl(url)
+
+            vbox := openUrl(chDone, url)
+            worker_window.Add(vbox)
+            worker_window.SetSizeRequest(600, 800)
+            worker_window.ShowAll()
+            defer worker_window.Emit("destroy")
+            
+            gtk.MainIteration()
+            log.Print("First Gtk Loop iteration complete, sending done")
 		}
 
-		log.Printf("asd")
 		if ret == 1 {
 			msg[len(msg)-1] = "OK"
 		} else {
 			msg[len(msg)-1] = "FAIL"
 		}
-		worker.SendMessage(msg)
-        for gtk.EventsPending() == true {
-            gtk.MainIterationDo(false)
-            log.Print("Gtk Main Iteration Doing..")
-        }
+        
+        worker.SendMessage(msg)
 	}
 }
 
-func openUrl(url string) {
-	gtk.Init(nil)
-	window := gtk.NewWindow(gtk.WINDOW_TOPLEVEL)
-	window.SetTitle("Goburt")
-	window.Connect("destroy", gtk.MainQuit)
+func gtkLoop () {
+	for gtk.EventsPending() == true {
+		gtk.MainIterationDo(false)
+		log.Print(".")
+	}
+}
 
+func openUrl(chDone chan bool, url string) *gtk.VBox {
 	vbox := gtk.NewVBox(false, 1)
 
 	entry := gtk.NewEntry()
@@ -108,40 +129,43 @@ func openUrl(url string) {
 	swin.SetPolicy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
 	swin.SetShadowType(gtk.SHADOW_IN)
 
-	webview := webkit.NewWebView()
-	webview.Connect("load-committed", func() {
-		entry.SetText(webview.GetUri())
-	})
-	webview.Connect("load-finished", func() {
-		// capture pnd and quit
-		log.Print("Outputting imag")
-		gtk.MainQuit()
-	})
-	swin.Add(webview)
 
-	vbox.Add(swin)
-	entry.SetText(url)
-	vbox.PackStart(entry, false, false, 0)
-	entry.Connect("activate", func() {
-		webview.LoadUri(entry.GetText())
-	})
+    webview := webkit.NewWebView()
+    webview.Connect("load-committed", func() {
+        entry.SetText(webview.GetUri())
+        gtkLoop()
+    })
+    webview.Connect("load-finished", func() {
+        // capture pnd and quit
+        gtkLoop()
+        log.Print("Outputting imag")
+        chDone <- true
+    })
+    swin.Add(webview)
 
-	window.Add(vbox)
-	window.SetSizeRequest(600, 800)
-	window.ShowAll()
+    vbox.Add(swin)
+    entry.SetText(url)
+    vbox.PackStart(entry, false, false, 0)
+    entry.Connect("activate", func() {
+        webview.LoadUri(entry.GetText())
+        gtkLoop()
+    })
 
-	proxy := os.Getenv("HTTP_PROXY")
+    proxy := os.Getenv("HTTP_PROXY")
 	if len(proxy) > 0 {
 		soup_uri := webkit.SoupUri(proxy)
 		webkit.GetDefaultSession().Set("proxy-uri", soup_uri)
 		soup_uri.Free()
 	}
+
 	entry.Emit("activate")
-	gtk.Main()
+    gtkLoop()
+    return vbox
 }
 
 func main() {
-	lbbroker := &lbbroker_t{}
+
+    lbbroker := &lbbroker_t{}
 	lbbroker.frontend, _ = zmq.NewSocket(zmq.ROUTER)
 	lbbroker.backend, _ = zmq.NewSocket(zmq.ROUTER)
 	defer lbbroker.frontend.Close()
@@ -149,13 +173,9 @@ func main() {
 	lbbroker.frontend.Bind(FE_URL)
 	lbbroker.backend.Bind(BE_URL)
 
-	// Client requests
-	//	for client_nbr := 0; client_nbr < NBR_CLIENTS; client_nbr++ {
-	//		go client_task()
-	//	}
-
+    
 	for worker_nbr := 0; worker_nbr < NBR_WORKERS; worker_nbr++ {
-		go worker_task()
+        go worker_task()
 	}
 
 	//  Queue of available workers
@@ -164,9 +184,9 @@ func main() {
 	//  Prepare reactor and fire it up
 	lbbroker.reactor = zmq.NewReactor()
 	lbbroker.reactor.AddSocket(lbbroker.backend, zmq.POLLIN,
-		func(e zmq.State) error { return handle_backend(lbbroker) })
-	lbbroker.reactor.Run(-1)
-
+		func(e zmq.State) error { gtkLoop(); return handle_backend(lbbroker) })
+    //bbroker.reactor.AddChannelTime(time.Tick(time.Second), 1, func(a interface{}) error { gtk.MainIterationDo(true); return nil })
+	lbbroker.reactor.Run(time.Second)
 }
 
 //  In the reactor design, each time a message arrives on a socket, the

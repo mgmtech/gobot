@@ -10,8 +10,11 @@ import (
 
 import redis "github.com/alphazero/Go-Redis"
 import irc "github.com/fluffle/goirc/client"
+import zmq "github.com/pebbe/zmq3"
 
 const (
+    // bots
+    parrot = "ipc://parrotbackend.ipc"
 	botname string = "GoBot"
 
 	// irc commands
@@ -28,9 +31,21 @@ const (
 	msgDate = "1/2/06 15:04:05"
 )
 
+// Super-Hacky! setup SUBscription socket to parrot
+func (ch *IrcChannelLogger) listentoparrot() {
+    client, err := zmq.NewSocket(zmq.SUB)
+    client.Connect(parrot)
+    client.SetSubscribe("")
+    if (err != nil) { log.Fatal("Problem connection to front-end")}
+    log.Print("conntecting to ", parrot)
+    for {
+        msg, _ := client.Recv(0)
+        log.Print("Git-parrot msg -> ", msg)
+        ch.multilineMsg(msg, ch.name)
 
-
-
+    }
+    
+}
 type IrcChannelLogger struct {
 	name        string // The name of the channel
 	time        int64  // The unix time that the logging started
@@ -43,8 +58,13 @@ type IrcChannelLogger struct {
 
 	client *irc.Conn    // The IRC Client for the channel
 	redis  redis.Client // The redis client connection
-	quit   chan bool    // A channel to signal close
+	done   chan bool    // A channel to signal close
 }
+
+/* Redis key helpers */
+func (ch *IrcChannelLogger) rkey() string            { return fmt.Sprintf("%s:%d:%s", ch.host, ch.port, ch.name) }
+func (ch *IrcChannelLogger) ukey(user string) string { return fmt.Sprintf("%s%s", ch.rkey(), user) }
+
 
 /*
 Bot commands and contextual help map
@@ -54,11 +74,37 @@ Commands are structured in a map[string][int] of functions which return a string
 
 */
 var botCommand = map[string]map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
-	"DIE": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+	"REDISCHECK": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
-			return "Whatchoo ¿awkin` bought wilis¿"
+	        return "REDISCHECK - Basic redis connection tests"
 		},
-		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { <-ch.quit; return "l8tr" },
+		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+            _, ok := ch.redis.AllKeys()
+            return fmt.Sprintf("Redis All keys command stats: (%v)", ok == nil)
+		},
+	},
+	"KEYS": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+	        return "KEYS - Show the redis keys in play"
+		},
+		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+            return fmt.Sprintf("Channel key is (%v) user key for GoBot is (%v), channel start (%v) -> %v %v",
+                ch.rkey(), ch.ukey("GoBot"), ch.rkey() + sfxLast, ch.rkey() + sfxStart, ch.time)
+		},
+	},
+	"VARS": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+	        return "VARS - Show the channel configuration parameters"
+		},
+		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+            return fmt.Sprintf("Channel configuration (%v) ", ch)
+		},
+	},
+	"DEATHKISS": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+			return "Whatchoo ¿awkin` bought wilis¿ you need to guess the magic number fool!"
+		},
+		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { ch.client.Quit(); return ""},
 	},
 	"HELP": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
@@ -67,7 +113,12 @@ command [arg1] [arg2]
 --------------------------------
 HELP - Display this help message
 HISTORY - Show users last 20 messages
-LASTSAW - Show users last seen timestamp`
+LASTSAW - Show users last seen timestamp
+DIE - Immediately close the channel logger (EXPERIMENTAL)
+KEYS - Show the channels keys, or an example of them
+TIMESTAMP - Show the channels timestamp
+REDISCHECK - Test the redis connection
+VARS - Remit the local configuration parameters`
 		},
 		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 			return "HELP command - Show help for the command."
@@ -118,9 +169,6 @@ LASTSAW - Show users last seen timestamp`
 		},
 	},
 }
-
-func (ch *IrcChannelLogger) rkey() string            { return fmt.Sprintf("%s:%d:%s:", ch.host, ch.port, ch.name) }
-func (ch *IrcChannelLogger) ukey(user string) string { return fmt.Sprintf("%s%s", ch.rkey(), user) }
 
 func (ch *IrcChannelLogger) user_left(user string) {
 	ch.redis.Set(ch.ukey(user)+sfxLast, []byte(ch.timestampstr()))
@@ -251,7 +299,7 @@ func (ch *IrcChannelLogger) start() {
 	}
 
 	ch.redis = cli
-	<-ch.quit
+	<-ch.done
 }
 
 func (ch *IrcChannelLogger) recTime(conn *irc.Conn) {
@@ -265,6 +313,12 @@ func (ch *IrcChannelLogger) recTime(conn *irc.Conn) {
 // Define IRC handlers
 func (ch *IrcChannelLogger) quitChan(conn *irc.Conn, line *irc.Line) {
 	log.Print(line.Nick + " has quit")
+    
+    if (line.Nick == ch.name) {
+        log.Print("Im dying!!!")
+        ch.redis.Quit()
+        ch.done <- true
+    }
 	ch.user_left(line.Nick)
 }
 
@@ -288,10 +342,11 @@ func (ch *IrcChannelLogger) joinChan(conn *irc.Conn, line *irc.Line) {
 		channelStart, _ := ch.redis.Get(chKey)
 
 		iStart, _ := strconv.ParseInt(string(channelStart), 10, 64)
-		log.Print("Channel start: ", iStart)
 
-		if iStart > 0 {
-			log.Printf("I've been here before, my lasttime is %v", ch.time)
+        if ch.time != 0 { // if it currently has channel time
+            return 
+        }  else if iStart > 0 {
+			log.Printf("I've been here before, my lasttime is %v", iStart)
 			ch.time = iStart
 		} else {
 			log.Printf(
@@ -339,7 +394,7 @@ func (ch *IrcChannelLogger) privMsg(conn *irc.Conn, line *irc.Line) {
 	log.Printf("privmsg function, source(%v) parts(%v) ", source, parts)
 	if len(parts) < 1 {
 		// wtf does this even do? when is it ever going to get called??
-		ch.quit <- true
+		ch.done <- true
 	} else if source == ch.nick || target == ch.nick {
 		/*
 		    If either the source of the message was for the tracked channel name
@@ -369,18 +424,19 @@ func (ch *IrcChannelLogger) privMsg(conn *irc.Conn, line *irc.Line) {
 }
 
 func main() {
-	mainquit := make(chan bool)
 
 	// Join the command/control server
 	cc := IrcChannelLogger{
-		name:   "#flashnotes-dev", // + botname,
+        name:   "#flashnotes-dev",
 		host:   "127.0.0.1",
 		port:   6667,
 		nick:   botname,
 		ssl:    false,
 		listen: true,
+        done: make(chan bool),
 	}
 
+    go cc.listentoparrot()
 	cc.start()
-	<-mainquit
+	<-cc.done
 }
