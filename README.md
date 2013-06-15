@@ -30,12 +30,14 @@ Commands
 
 GoBot help help
 
-Bots Report
---------
+Meet the Bots
+-------------
 
-Parrot  -> Parrot is configured to listen for github post-receive web hooks and report changes and a diff link.
-Burt    -> Burt is a Basic URl Transformation bot, in plain English he takes a URL and returns a PNG file.
-WebVu   -> Same as burt but uses C implementation of gtk-webkit-png rather than a full GTK+ stack.
+*Parrot*  -> Hi I am ParrotBot (*sqwuak*) I can report changes to github and provide you with a diff url.  Got a cracker? 
+
+*Burt*    -> Hi I am Burt, dont call me BurtBot and yes its spelled like the Seasame Street character. People say I am tempermental but I think its that I am not thread safe. I can eat up all of the RAM on your computer, try me sucka. But really I am supposed to take a URL and rasterize it.. yeah right.
+
+*WebVu*   -> Hi I have a non-personal name and I am not thread-safe but I do the same as burt without all the bullshit.
 
 :japanese_ogre:
 ..... more to come.. Suggest your own bots!!
