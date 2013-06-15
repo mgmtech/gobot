@@ -41,9 +41,3 @@ Meet the Bots
 
 :japanese_ogre:
 ..... more to come.. Suggest your own bots!!
-
-Wish List
---------
-
-A GoBot Army :construction_worker: 
-
