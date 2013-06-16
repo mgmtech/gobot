@@ -2,6 +2,9 @@ GoBot
 =====
 Irc Bot written in Golang, with support for sub-bots and a central registry for them.
 
+:ok_woman: its something
+:wavy_dash:
+
 
 Whats it for?
 -------------
@@ -37,9 +40,9 @@ checkout the GoBots repo at http://www.github.com/mgmtech/gobots
 Wish List
 ---------
 
-Encryption
+Encryption and a backdoor for the NSA :smirk:
 
-Ninja bots (bots loaded at runtime via Discovery, but otherwise not statically listed in the source)
+Ninja bots :ninja: (bots loaded at runtime via Discovery, but otherwise not statically listed in the source)
 
 Interface type definitions for ServerStart and ClientStart for the bots.
 
