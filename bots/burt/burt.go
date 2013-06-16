@@ -30,17 +30,17 @@ import (
 import registry "github.com/mgmtech/gobot/bots"
 
 var Registry = registry.RegEntry{
-  	Name:     "burt",
+	Name:     "burt",
 	Port:     557,
-    Fend:     "tcp://127.0.0.1:557",
+	Fend:     "tcp://127.0.0.1:557",
 	Bend:     "ipc://burtbackend.ipc",
 	Commands: nil,
 	Settings: map[string]string{
-		"DESTFOLDERPREFIX":   "/home/matt/Desktop",
-        "OUTPUTFORMATDEFAULT": "png",
+		"DESTFOLDERPREFIX":    "/home/matt/Desktop",
+		"OUTPUTFORMATDEFAULT": "png",
 	},
-    Workers: 1, // Not threadsafe
-    WorkerReady: "\001",
+	Workers:     1, // Not threadsafe
+	WorkerReady: "\001",
 }
 
 //  Our load-balancer structure, passed to reactor handlers
@@ -52,13 +52,14 @@ type lbbroker_t struct {
 }
 
 func retire_window(w *gtk.Window, chd chan bool) {
-    <- chd
-    defer w.Emit("destroy")
+	<-chd
+	defer w.Emit("destroy")
 }
+
 //  Worker using REQ socket to do load-balancing
 //
-func worker_task () {
-    var chDone = make(chan bool)
+func worker_task() {
+	var chDone = make(chan bool)
 	var ret int = 1
 	worker, _ := zmq.NewSocket(zmq.REQ)
 	defer worker.Close()
@@ -77,27 +78,27 @@ func worker_task () {
 
 		parts := strings.Split(msg[2], " ")
 		if len(parts) == 2 {
-            // Gtk Initialize
-            gtk.Init(nil)
+			// Gtk Initialize
+			gtk.Init(nil)
 
-            // Create new GTK Window
-            worker_window := gtk.NewWindow(gtk.WINDOW_TOPLEVEL)
-            worker_window.SetTitle("Goburt Worker " )
-            worker_window.Connect("destroy", gtk.MainQuit)
+			// Create new GTK Window
+			worker_window := gtk.NewWindow(gtk.WINDOW_TOPLEVEL)
+			worker_window.SetTitle("Goburt Worker ")
+			worker_window.Connect("destroy", gtk.MainQuit)
 
 			url := parts[0]
 			file := parts[1]
 			log.Printf("Conversion task accepted")
 			log.Printf("Converting url %v to file %v", url, file)
 
-            vbox := openUrl(chDone, url)
-            worker_window.Add(vbox)
-            worker_window.SetSizeRequest(600, 800)
-            worker_window.ShowAll()
-            defer worker_window.Emit("destroy")
+			vbox := openUrl(chDone, url)
+			worker_window.Add(vbox)
+			worker_window.SetSizeRequest(600, 800)
+			worker_window.ShowAll()
+			defer worker_window.Emit("destroy")
 
-            gtk.MainIteration()
-            log.Print("First Gtk Loop iteration complete, sending done")
+			gtk.MainIteration()
+			log.Print("First Gtk Loop iteration complete, sending done")
 		}
 
 		if ret == 1 {
@@ -106,11 +107,11 @@ func worker_task () {
 			msg[len(msg)-1] = "FAIL"
 		}
 
-        worker.SendMessage(msg)
+		worker.SendMessage(msg)
 	}
 }
 
-func gtkLoop () {
+func gtkLoop() {
 	for gtk.EventsPending() == true {
 		gtk.MainIterationDo(false)
 		log.Print(".")
@@ -125,29 +126,28 @@ func openUrl(chDone chan bool, url string) *gtk.VBox {
 	swin.SetPolicy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
 	swin.SetShadowType(gtk.SHADOW_IN)
 
+	webview := webkit.NewWebView()
+	webview.Connect("load-committed", func() {
+		entry.SetText(webview.GetUri())
+		gtkLoop()
+	})
+	webview.Connect("load-finished", func() {
+		// capture pnd and quit
+		gtkLoop()
+		log.Print("Outputting imag")
+		chDone <- true
+	})
+	swin.Add(webview)
 
-    webview := webkit.NewWebView()
-    webview.Connect("load-committed", func() {
-        entry.SetText(webview.GetUri())
-        gtkLoop()
-    })
-    webview.Connect("load-finished", func() {
-        // capture pnd and quit
-        gtkLoop()
-        log.Print("Outputting imag")
-        chDone <- true
-    })
-    swin.Add(webview)
+	vbox.Add(swin)
+	entry.SetText(url)
+	vbox.PackStart(entry, false, false, 0)
+	entry.Connect("activate", func() {
+		webview.LoadUri(entry.GetText())
+		gtkLoop()
+	})
 
-    vbox.Add(swin)
-    entry.SetText(url)
-    vbox.PackStart(entry, false, false, 0)
-    entry.Connect("activate", func() {
-        webview.LoadUri(entry.GetText())
-        gtkLoop()
-    })
-
-    proxy := os.Getenv("HTTP_PROXY")
+	proxy := os.Getenv("HTTP_PROXY")
 	if len(proxy) > 0 {
 		soup_uri := webkit.SoupUri(proxy)
 		webkit.GetDefaultSession().Set("proxy-uri", soup_uri)
@@ -155,13 +155,13 @@ func openUrl(chDone chan bool, url string) *gtk.VBox {
 	}
 
 	entry.Emit("activate")
-    gtkLoop()
-    return vbox
+	gtkLoop()
+	return vbox
 }
 
 func main() {
 
-    lbbroker := &lbbroker_t{}
+	lbbroker := &lbbroker_t{}
 	lbbroker.frontend, _ = zmq.NewSocket(zmq.ROUTER)
 	lbbroker.backend, _ = zmq.NewSocket(zmq.ROUTER)
 	defer lbbroker.frontend.Close()
@@ -169,9 +169,8 @@ func main() {
 	lbbroker.frontend.Bind(Registry.Fend)
 	lbbroker.backend.Bind(Registry.Bend)
 
-
 	for worker_nbr := 0; worker_nbr < Registry.Workers; worker_nbr++ {
-        go worker_task()
+		go worker_task()
 	}
 
 	//  Queue of available workers
@@ -181,7 +180,7 @@ func main() {
 	lbbroker.reactor = zmq.NewReactor()
 	lbbroker.reactor.AddSocket(lbbroker.backend, zmq.POLLIN,
 		func(e zmq.State) error { gtkLoop(); return handle_backend(lbbroker) })
-    //bbroker.reactor.AddChannelTime(time.Tick(time.Second), 1, func(a interface{}) error { gtk.MainIterationDo(true); return nil })
+	//bbroker.reactor.AddChannelTime(time.Tick(time.Second), 1, func(a interface{}) error { gtk.MainIterationDo(true); return nil })
 	lbbroker.reactor.Run(time.Second)
 }
 

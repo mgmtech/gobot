@@ -44,26 +44,18 @@ import (
 import redis "github.com/alphazero/Go-Redis"
 import irc "github.com/fluffle/goirc/client"
 
-import registry "github.com/mgmtech/gobot/bots"
+// TODO: implement interfaces which use multi-methods? possible?
 
-// Import the bots
-import parrot "github.com/mgmtech/gobot/bots/parrot"
-import burt "github.com/mgmtech/gobot/bots/burt"
-import webvu "github.com/mgmtech/gobot/bots/webvu"
+import bots "github.com/mgmtech/gobot/bots"
 
-// Declare the botmap
-var gobots = registry.BotRegistry{
-	"parrot": parrot.Registry,
-    "burt": burt.Registry,
-    "webvu": webvu.Registry,
-    }
+// use of interfaces methods, solve the issue of importing bots here!
+import "github.com/mgmtech/gobot/bots/parrot"
 
-// Super-Hacky! setup SUBscription socket to parrot
 func (ch *IrcChannelLogger) listentoparrot() {
 
-    client := parrot.CliStart()
-    defer client.Close()
-    log.Print("conntecting to ", parrot.Registry.Bend)
+	client := parrot.CliStart() //bots.Registry["parrot"].CliStart() ?!
+	defer client.Close()
+	log.Print("conntecting to ", parrot.Registry.Bend)
 	for {
 		msg, _ := client.Recv(0)
 		log.Print("Git-parrot msg -> ", msg)
@@ -436,7 +428,7 @@ func (ch *IrcChannelLogger) privMsg(conn *irc.Conn, line *irc.Line) {
 	log.Printf("privmsg function, source(%v) parts(%v) ", source, parts)
 	if len(parts) < 1 {
 		// wtf does this even do? when is it ever going to get called??
-        log.Print("Hi")
+		log.Print("Hi")
 		ch.done <- true
 	} else if source == ch.nick || target == ch.nick && len(parts) > 0 {
 		/*
@@ -455,16 +447,16 @@ func (ch *IrcChannelLogger) privMsg(conn *irc.Conn, line *irc.Line) {
 			command = strings.ToUpper(parts[0])
 			args = parts[1:]
 			dest = line.Nick
-		} else if target == ch.nick && len(parts) >= 2{
+		} else if target == ch.nick && len(parts) >= 2 {
 			command = strings.ToUpper(parts[1])
 			args = parts[2:]
 			dest = ch.name
 		}
-        
-        if command != "" {
-            log.Printf("Command received: %s and arguments(%d): %s", command, len(args), args)
-            go ch.multilineMsg(ch.command(command, args, line), dest)
-        }
+
+		if command != "" {
+			log.Printf("Command received: %s and arguments(%d): %s", command, len(args), args)
+			go ch.multilineMsg(ch.command(command, args, line), dest)
+		}
 	}
 }
 
@@ -481,8 +473,8 @@ func main() {
 		done:   make(chan bool),
 	}
 
-    go parrot.SrvStart()
+	bots.Start()
 
-    go cc.listentoparrot()
+	go cc.listentoparrot()
 	cc.start()
 }

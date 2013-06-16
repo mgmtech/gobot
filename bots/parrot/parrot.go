@@ -19,12 +19,10 @@ import (
 	"net/http"
 	"text/template"
 
-	registry "github.com/mgmtech/gobot/bots"
+	registry "github.com/mgmtech/gobot/bots/registry"
 	zmq "github.com/pebbe/zmq3"
 )
 
-// parrot registry entry, as this does not respond to commands and does not have
-// a request socket commands and Frontend is nil.
 var Registry = registry.RegEntry{
 	Name:     "parrot",
 	Port:     556,
@@ -64,8 +62,6 @@ type GitWebHookPayload struct {
 	CompBranch string
 }
 
-/* GitWebHookPayload Json */
-
 /* String template for url functions */
 const (
 	githubTemplates = `
@@ -75,8 +71,6 @@ const (
 )
 
 var tmplGit = template.Must(template.New("git").Parse(githubTemplates))
-
-/* Url string template */
 
 func info(msg string) { log.Printf("INFO (Parrot)-> %v", msg) }
 
@@ -106,11 +100,6 @@ func CliStart() *zmq.Socket {
 }
 
 func SrvStart() {
-	// TODO: Wire up c&c using zmq
-	//  Implement a Bot-registry to contain common ports, functions and
-	// help/command strings including settings.. etc
-	// use functional closures to possibly implement commands out of origin
-
 	// Link up publisher socket, could use Multicast here..
 	client, err := zmq.NewSocket(zmq.PUB)
 	if err != nil {
@@ -118,6 +107,7 @@ func SrvStart() {
 	}
 	defer client.Close()
 	client.Bind(Registry.Bend)
+
 	// Handle the post-receive from github.com..
 	http.HandleFunc("/post-receive",
 		func(w http.ResponseWriter, r *http.Request) {
@@ -142,17 +132,4 @@ func SrvStart() {
 
 	log.Fatal(http.ListenAndServe(":"+Registry.Settings["GITPUSHPORT"], nil))
 
-}
-
-//  Pops frame off front of message and returns it as 'head'
-//  If next frame is empty, pops that empty frame.
-//  Return remaining frames of message as 'tail'
-func unwrap(msg []string) (head string, tail []string) {
-	head = msg[0]
-	if len(msg) > 1 && msg[1] == "" {
-		tail = msg[2:]
-	} else {
-		tail = msg[1:]
-	}
-	return
 }

@@ -1,4 +1,4 @@
-package webvu 
+package webvu
 
 /*
 #include <stdio.h>
@@ -61,18 +61,19 @@ import (
 import registry "github.com/mgmtech/gobot/bots"
 
 var Registry = registry.RegEntry{
-  	Name:     "webvu",
+	Name:     "webvu",
 	Port:     558,
-    Fend:     "tcp://127.0.0.1:558",
+	Fend:     "tcp://127.0.0.1:558",
 	Bend:     "ipc://webvubackend.ipc",
 	Commands: nil,
 	Settings: map[string]string{
-		"DESTFOLDERPREFIX":   "/home/matt/Desktop",
-        "OUTPUTFORMATDEFAULT": "png",
+		"DESTFOLDERPREFIX":    "/home/matt/Desktop",
+		"OUTPUTFORMATDEFAULT": "png",
 	},
-    Workers: 1, // Not threadsafe
-    WorkerReady: "\001",
+	Workers:     1, // Not threadsafe
+	WorkerReady: "\001",
 }
+
 /*
 
 
@@ -93,8 +94,8 @@ func url2png(source string, destination string, format string) int {
 	defer C.free(unsafe.Pointer(cDst))
 	defer C.free(unsafe.Pointer(cFmt))
 
-	log.Print("%v -> %v %v", source, 
-        Registry.Settings["DESTFOLDERPREFIX"] + destination, format)
+	log.Print("%v -> %v %v", source,
+		Registry.Settings["DESTFOLDERPREFIX"]+destination, format)
 	return int(C.url2png(cSrc, cDst, cFmt))
 }
 
@@ -141,9 +142,9 @@ func worker_task() {
 			log.Printf("Worker encountered error %v", e)
 			break //  Interrupted
 		}
-        log.Printf("%v %v", msg ,e)
+		log.Printf("%v %v", msg, e)
 		parts := strings.Split(msg[2], " ")
-        log.Printf("%v", parts)
+		log.Printf("%v", parts)
 		if len(parts) == 2 {
 			url := parts[0]
 			file := parts[1]
