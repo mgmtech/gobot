@@ -46,10 +46,10 @@ import irc "github.com/fluffle/goirc/client"
 
 // TODO: implement interfaces which use multi-methods? possible?
 
-import bots "github.com/mgmtech/bots"
+import bots "github.com/mgmtech/gobots"
 
 // use of interfaces methods, solve the issue of importing bots here!
-import "github.com/mgmtech/bots/parrot"
+import parrot "github.com/mgmtech/gobots/parrot"
 
 func (ch *IrcChannelLogger) listentoparrot() {
 
