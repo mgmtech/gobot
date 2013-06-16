@@ -28,12 +28,7 @@ GoBot help help
 Meet the Bots
 -------------
 
-*Parrot*  -> I'm ParrotBot (*sqwuak*) I can report changes to github and provide you with a diff url.  Got a cracker? 
-
-*Burt*    -> Hi my name is Burt, dont call me BurtBot and no my name is no spelled like the Seasame Street character. People say I am temper-mental but I think its that I am not thread safe. I can eat up all of the RAM on your computer, try me sucka. But really I am supposed to take a URL and rasterize it.. if I get around to it.
-
-*WebVu*   -> *beep*  -I am not thread-safe- ... - I will preform the same as burt without all the bullshit - *beep*
-
+checkout the GoBots repo at http://www.github.com/mgmtech/gobots
 
 :japanese_ogre:
 ..... more to come.. Suggest your own bots!!
@@ -44,11 +39,8 @@ Wish List
 
 Encryption
 
-Ninja bots aka Stealth bots (bots loaded at runtime via Discovery, but otherwise not statically listed in the source)
+Ninja bots (bots loaded at runtime via Discovery, but otherwise not statically listed in the source)
 
 Interface type definitions for ServerStart and ClientStart for the bots.
 
 A local bot config file to configure the initial setup for bots per host.
-
-Vektor - a side-project in the works to allow remote-loading GoBot IRC servers remotely via SSH.
-
