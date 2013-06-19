@@ -28,7 +28,7 @@ to the bot.. This will hopefully allow adding/removing bots to be easy and pain
 free. GoBot uses ZeroMq to speak to its sub-bots, eventually by name these bots
 will be invoked using GoBot as their proxy. By virtue of ZeroMq there are a lot
 os possible combinations and I am certain that things will be under heavy changes
-most of the time. Please use master for a running version (STABLE).
+most of the time.
 
 */
 
@@ -53,9 +53,10 @@ import parrot "github.com/mgmtech/gobots/parrot"
 
 func (ch *IrcChannelLogger) listentoparrot() {
 
-	client := parrot.CliStart() //bots.Registry["parrot"].CliStart() ?!
+	client := parrot.CliStart() // bots.Roster["parrot"].CliStart()
 	defer client.Close()
-	log.Print("conntecting to ", parrot.Registry.Bend)
+	//log.Print("conntecting to ", bots.Registry["parrot"].Bend)
+
 	for {
 		msg, _ := client.Recv(0)
 		log.Print("Git-parrot msg -> ", msg)
@@ -466,7 +467,7 @@ func main() {
 	cc := IrcChannelLogger{
 		name:   "#flashnotes-dev",
 		host:   "127.0.0.1",
-		port:   6667,
+		port:   6669,
 		nick:   botname,
 		ssl:    false,
 		listen: true,
