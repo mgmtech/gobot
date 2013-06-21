@@ -1,7 +1,7 @@
 package main
 
 /*
-   GoBot is free software: you can rclienttribute it and/or modify
+   GoBot is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
    the Free Software Foundation, either version 3 of the License, or
    (at your option) any later version.
@@ -110,7 +110,7 @@ Commands are structured in a map[string][int] of functions which return a string
 
 */
 var botCommand = map[string]map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
-	"rclientCHECK": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+	"REDISCHECK": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 			return "rclientCHECK - Basic rclient connection tests"
 		},
@@ -119,6 +119,15 @@ var botCommand = map[string]map[int]func(*IrcChannelLogger, []string, *irc.Line)
 			return fmt.Sprintf("rclient All keys command stats: (%v)", ok == nil)
 		},
 	},
+	"BOTS": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+            return "BOTS - :ninja:"
+		},
+		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+			return fmt.Sprintf("%v", bots.Registry) // their the mots
+		},
+	},
+
 	"KEYS": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 			return "KEYS - Show the rclient keys in play"

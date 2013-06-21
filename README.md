@@ -1,6 +1,6 @@
 GoBot
 =====
-Golang Irc Bot using fluffles. 
+Golang Irc Bot using fluffles goirc. 
 
 
 :ok_woman: its something   
