@@ -1,7 +1,6 @@
 GoBot
 =====
-Golang Irc Bot using fluffles goirc. 
-
+Irc Bot written in Golang, with support for sub-bots and a central registry for them.
 
 :ok_woman: its something   
 :wavy_dash:
