@@ -1,7 +1,7 @@
 package main
 
 /*
-   GoBot is free software: you can redistribute it and/or modify
+   GoBot is free software: you can rclienttribute it and/or modify
    it under the terms of the GNU General Public License as published by
    the Free Software Foundation, either version 3 of the License, or
    (at your option) any later version.
@@ -42,6 +42,7 @@ import (
 )
 
 import redis "github.com/alphazero/Go-Redis"
+
 import irc "github.com/fluffle/goirc/client"
 
 // TODO: implement interfaces which use multi-methods? possible?
@@ -75,7 +76,7 @@ const (
 	quit         = "QUIT"
 	names        = "NAMES"
 
-	// redis key suffixes
+	// rclient key suffixes
 	sfxLast  = ":lastseen"
 	sfxStart = ":starttime"
 
@@ -93,11 +94,11 @@ type IrcChannelLogger struct {
 	initialized bool   // Channel initialized?
 
 	client *irc.Conn    // The IRC Client for the channel
-	redis  redis.Client // The redis client connection
+	rclient  redis.Client // The rclient client connection
 	done   chan bool    // A channel to signal close
 }
 
-/* Redis key helpers */
+/* rclient key helpers */
 func (ch *IrcChannelLogger) rkey() string            { return fmt.Sprintf("%s:%d:%s", ch.host, ch.port, ch.name) }
 func (ch *IrcChannelLogger) ukey(user string) string { return fmt.Sprintf("%s:%s", ch.rkey(), user) }
 
@@ -109,18 +110,18 @@ Commands are structured in a map[string][int] of functions which return a string
 
 */
 var botCommand = map[string]map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
-	"REDISCHECK": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+	"rclientCHECK": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
-			return "REDISCHECK - Basic redis connection tests"
+			return "rclientCHECK - Basic rclient connection tests"
 		},
 		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
-			_, ok := ch.redis.AllKeys()
-			return fmt.Sprintf("Redis All keys command stats: (%v)", ok == nil)
+			_, ok := ch.rclient.AllKeys()
+			return fmt.Sprintf("rclient All keys command stats: (%v)", ok == nil)
 		},
 	},
 	"KEYS": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
-			return "KEYS - Show the redis keys in play"
+			return "KEYS - Show the rclient keys in play"
 		},
 		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 			return fmt.Sprintf("Channel key is (%v) user key for GoBot is (%v), channel start (%v) -> %v %v",
@@ -152,7 +153,7 @@ LASTSAW - Show users last seen timestamp
 DIE - Immediately close the channel logger (EXPERIMENTAL)
 KEYS - Show the channels keys, or an example of them
 TIMESTAMP - Show the channels timestamp
-REDISCHECK - Test the redis connection
+rclientCHECK - Test the rclient connection
 VARS - Remit the local configuration parameters`
 		},
 		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
@@ -206,18 +207,18 @@ VARS - Remit the local configuration parameters`
 }
 
 func (ch *IrcChannelLogger) user_left(user string) {
-	ch.redis.Set(ch.ukey(user)+sfxLast, []byte(ch.timestampstr()))
+	ch.rclient.Set(ch.ukey(user)+sfxLast, []byte(ch.timestampstr()))
 }
 
 func (ch *IrcChannelLogger) lastseen(user string) int64 {
-	v, _ := ch.redis.Get(ch.ukey(user) + sfxLast)
+	v, _ := ch.rclient.Get(ch.ukey(user) + sfxLast)
 	i, _ := strconv.ParseInt(string(v), 10, 64)
 	log.Printf("Last seen for user %s was %d", user, i)
 	return i
 }
 
 func (ch *IrcChannelLogger) missed(user string) int32 {
-	value, err := ch.redis.Zrangebyscore(ch.rkey(), float64(ch.lastseen(user)), float64(ch.timestamp()))
+	value, err := ch.rclient.Zrangebyscore(ch.rkey(), float64(ch.lastseen(user)), float64(ch.timestamp()))
 	if err != nil {
 		log.Printf("Error was %v, value is %v", err, value)
 	} else {
@@ -227,7 +228,7 @@ func (ch *IrcChannelLogger) missed(user string) int32 {
 }
 
 func (ch *IrcChannelLogger) messages(start, end int) string {
-	rVal, err := ch.redis.Zrangebyscore(ch.rkey(), float64(start), float64(end))
+	rVal, err := ch.rclient.Zrangebyscore(ch.rkey(), float64(start), float64(end))
 
 	log.Printf("%v Message retrived", len(rVal))
 	if err != nil {
@@ -329,11 +330,11 @@ func (ch *IrcChannelLogger) start() {
 	cli, err := redis.NewSynchClient()
 
 	if err != nil {
-		log.Println("Failed to connect to redis, the error was ", err)
+		log.Println("Failed to connect to rclient, the error was ", err)
 		return
 	}
 
-	ch.redis = cli
+	ch.rclient = cli
 	<-ch.done
 }
 
@@ -351,7 +352,6 @@ func (ch *IrcChannelLogger) quitChan(conn *irc.Conn, line *irc.Line) {
 
 	if line.Nick == ch.name {
 		log.Print("Im dying!!!")
-		ch.redis.Quit()
 		ch.done <- true
 	}
 	ch.user_left(line.Nick)
@@ -374,7 +374,7 @@ func (ch *IrcChannelLogger) joinChan(conn *irc.Conn, line *irc.Line) {
 	if line.Nick == ch.nick {
 		log.Printf(
 			"Gobot joined channel %v, recording all traffic and lastseen", ch.name)
-		channelStart, _ := ch.redis.Get(chKey)
+		channelStart, _ := ch.rclient.Get(chKey)
 
 		iStart, _ := strconv.ParseInt(string(channelStart), 10, 64)
 
@@ -387,7 +387,7 @@ func (ch *IrcChannelLogger) joinChan(conn *irc.Conn, line *irc.Line) {
 			log.Printf(
 				"I have no recollection of this place(%v) logging time.", ch.time)
 			ch.time = time.Now().Unix()
-			ch.redis.Set(chKey, []byte(strconv.FormatInt(ch.time, 10)))
+			ch.rclient.Set(chKey, []byte(strconv.FormatInt(ch.time, 10)))
 		}
 	}
 	if ch.initialized == false {
@@ -420,8 +420,8 @@ func (ch *IrcChannelLogger) privMsg(conn *irc.Conn, line *irc.Line) {
 		ch.nick,
 		ch.name)
 
-	// log the message with timestamp to redis
-	ch.redis.Zadd(ch.rkey(), float64(
+	// log the message with timestamp to rclient
+	ch.rclient.Zadd(ch.rkey(), float64(
 		ch.timestamp()), []byte(fmt.Sprintf(
 		"%v> %s: %s", time.Now().Format(msgDate),
 		line.Nick, line.Args[1])))
