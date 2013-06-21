@@ -1,6 +1,7 @@
 GoBot
 =====
-Irc Bot written in Golang, with support for sub-bots and a central registry for them.
+Golang Irc Bot using fluffles. 
+
 
 :ok_woman: its something   
 :wavy_dash:
@@ -8,12 +9,9 @@ Irc Bot written in Golang, with support for sub-bots and a central registry for 
 
 Whats it for?
 -------------
-GoBot is now a full-featured bot with modular subbots (GoBots) controlled via 
-0mq.
 
-The original GoBot implementation was basically a mashup of the awesome goirc 
-libary (github.com/fluffle/goirc/) and (alphazero) redis client. Its original 
-intention was to log Irc conversations and provide a "What did I miss" feature.
+The original GoBots intention was to log Irc conversations and provide a 
+"What did I miss" feature.
 
 **"What did I miss feature"**
 By recording a users lastseen timestamp (unix time) relative
@@ -21,7 +19,7 @@ to the channels timestamp as well as the IRC channel conversation its assigned
 to GoBot records messages using a Redis Sorted Set whose message score is the timedelta
 of the current time minus the start of the logging in the channel (uptime).
 
-Messages *should* be set to expire 72 hours after they are logged so as not to eat up RAM/disk.
+Redis messages *should* be set to expire 72 hours after they are logged so as not to eat up RAM/disk.
 
 Commands
 --------
@@ -39,6 +37,8 @@ checkout the GoBots repo at http://www.github.com/mgmtech/gobots
 
 Wish List
 ---------
+
+Support for sub-bots and a central registry for them
 
 Encryption and a backdoor for the NSA :smirk:
 
