@@ -486,7 +486,7 @@ func main() {
 	cc := IrcChannelLogger{
 		name:   "#flashnotes-dev",
 		host:   "127.0.0.1",
-		port:   6667,
+		port:   6669,
 		nick:   botname,
 		ssl:    false,
 		listen: true,
