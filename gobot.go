@@ -428,6 +428,9 @@ func (ch *IrcChannelLogger) connectIRC(conn *irc.Conn, line *irc.Line) {
 }
 
 func (ch *IrcChannelLogger) privMsg(conn *irc.Conn, line *irc.Line) {
+	cli, _ := redis.NewSynchClient()
+    ch.rclient = cli
+
 	source := line.Args[0]
 	parts := strings.Fields(line.Args[1])
 	target := parts[0]
