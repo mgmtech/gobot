@@ -47,7 +47,7 @@ import irc "github.com/fluffle/goirc/client"
 
 // TODO: implement interfaces which use multi-methods? possible?
 
-import bots "github.com/mgmtech/gobots"
+//import bots "github.com/mgmtech/gobots"
 
 // use of interfaces methods, solve the issue of importing bots here!
 import parrot "github.com/mgmtech/gobots/parrot"
@@ -124,10 +124,19 @@ var botCommand = map[string]map[int]func(*IrcChannelLogger, []string, *irc.Line)
             return "BOTS - :ninja:"
 		},
 		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
-			return fmt.Sprintf("%v", bots.Registry) // their the mots
+            return fmt.Sprintf("%v", ":#")
+            //bots.Registry) // their the mots
 		},
 	},
-
+	"WHO": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+            return "WHO - :neckbeard:"
+		},
+		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+            return fmt.Sprintf("%v", ch.client.ST.GetChannel(ch.name).NicksStr())
+            //bots.Registry) // their the mots
+		},
+	},
 	"KEYS": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 			return "KEYS - Show the rclient keys in play"
@@ -213,6 +222,7 @@ VARS - Remit the local configuration parameters`
 				time.Now().Unix(), ch.time, ch.timestamp(), ch.timestamp()/60)
 		},
 	},
+
 }
 
 func (ch *IrcChannelLogger) user_left(user string) {
@@ -476,14 +486,14 @@ func main() {
 	cc := IrcChannelLogger{
 		name:   "#flashnotes-dev",
 		host:   "127.0.0.1",
-		port:   6669,
+		port:   6667,
 		nick:   botname,
 		ssl:    false,
 		listen: true,
 		done:   make(chan bool),
 	}
 
-	bots.Start()
+	//bots.Start()
 
 	go cc.listentoparrot()
 	cc.start()
