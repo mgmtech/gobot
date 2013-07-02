@@ -442,12 +442,6 @@ func (ch *IrcChannelLogger) privMsg(conn *irc.Conn, line *irc.Line) {
 		ch.nick,
 		ch.name)
 
-	// log the message with timestamp to rclient
-	ch.rclient.Zadd(ch.rkey(), float64(
-		ch.timestamp()), []byte(fmt.Sprintf(
-		"%v> %s: %s", time.Now().Format(msgDate),
-		line.Nick, line.Args[1])))
-
 	log.Printf("privmsg function, source(%v) parts(%v) ", source, parts)
 	if len(parts) < 1 {
 		// wtf does this even do? when is it ever going to get called??
@@ -480,7 +474,13 @@ func (ch *IrcChannelLogger) privMsg(conn *irc.Conn, line *irc.Line) {
 			log.Printf("Command received: %s and arguments(%d): %s", command, len(args), args)
 			go ch.multilineMsg(ch.command(command, args, line), dest)
 		}
-	}
+	} else { 
+        	// log the message with timestamp to rclient
+        ch.rclient.Zadd(ch.rkey(), float64(
+            ch.timestamp()), []byte(fmt.Sprintf(
+            "%v> %s: %s", time.Now().Format(msgDate),
+            line.Nick, line.Args[1])))
+    }
 }
 
 func main() {
