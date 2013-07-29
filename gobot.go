@@ -154,7 +154,7 @@ var botCommand = map[string]map[int]func(*IrcChannelLogger, []string, *irc.Line)
 			return fmt.Sprintf("Channel configuration (%v) ", ch)
 		},
 	},
-	"DEATHKISS": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+	"DIE": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 			return "Whatchoo ¿awkin` bought wilis¿ you need to guess the magic number fool!"
 		},
@@ -171,8 +171,10 @@ LASTSAW - Show users last seen timestamp
 DIE - Immediately close the channel logger (EXPERIMENTAL)
 KEYS - Show the channels keys, or an example of them
 TIMESTAMP - Show the channels timestamp
-rclientCHECK - Test the rclient connection
-VARS - Remit the local configuration parameters`
+REDISCHECK - Test the rclient connection
+WHO - Lists tracked (current) users in the channel
+VARS - Remit the local configuration parameters
+BOTS - ...`
 		},
 		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 			return "HELP command - Show help for the command."
