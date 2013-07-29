@@ -6,6 +6,9 @@ Irc Bot written in Golang, with support for sub-bots and a central registry for 
 :wavy_dash:
 
 
+TODO: Implement ping/pong using 0mq as the connection borks when the laptop is 
+put to sleep.
+
 Whats it for?
 -------------
 
