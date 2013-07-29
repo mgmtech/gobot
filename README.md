@@ -9,6 +9,11 @@ Irc Bot written in Golang, with support for sub-bots and a central registry for 
 TODO: Implement ping/pong using 0mq as the connection borks when the laptop is 
 put to sleep.
 
+Implement re-connect logic in the event of network failure. . 
+
+irc.recv() EOF line 224
+
+
 Whats it for?
 -------------
 
