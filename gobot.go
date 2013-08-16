@@ -164,20 +164,8 @@ var botCommand = map[string]map[int]func(*IrcChannelLogger, []string, *irc.Line)
 		},
 		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { ch.client.Quit(); return "" },
 	},
-	"NMAP": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
-		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
-			return "NMAP [nmap args] -> Run nmap with args"
-		},
-		2: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { 
-            out, err := exec.Command("nmap", args[1]).Output()
-            if err != nil {
-                log.Fatal(err)
-            }
-            return fmt.Sprintf("%s", out)
-        },
-    },
 
-	"MAXPROCS": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+    "MAXPROCS": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 			return "MAXPROCS -> Show maximum processors available"
 		},
@@ -269,7 +257,62 @@ var botCommand = map[string]map[int]func(*IrcChannelLogger, []string, *irc.Line)
             return "nothing to do"
         },
     },
-	"HELP": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+	
+    "NMAP": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+			return "NMAP [nmap args] -> Run nmap with args"
+		},
+		1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { 
+            out, err := exec.Command("nmap", args[0]).Output()
+            if err != nil {
+                log.Fatal(err)
+            }
+            
+            return fmt.Sprintf("%v", string(out))
+        },
+		2: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { 
+            out, err := exec.Command("nmap", args[0], args[1]).Output()
+            if err != nil {
+                log.Fatal(err)
+            }
+            
+            return fmt.Sprintf("%v", string(out))
+        },
+
+    },
+    "DIG": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+			return "DIG [arg0] [arg1] [arg2]-> Runs dig with args"
+		},
+		1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { 
+            out, err := exec.Command("dig", args[0]).Output()
+            if err != nil {
+                log.Fatal(err)
+            }
+            
+            return fmt.Sprintf("%v", string(out))
+        },
+		2: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { 
+            out, err := exec.Command("dig", args[0], args[1]).Output()
+            if err != nil {
+                log.Fatal(err)
+            }
+            
+            return fmt.Sprintf("%v", string(out))
+        },
+		3: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { 
+            out, err := exec.Command("dig", args[0], args[1], args[2]).Output()
+            if err != nil {
+                log.Fatal(err)
+            }
+            
+            return fmt.Sprintf("%v", string(out))
+        },
+
+    },
+
+
+    "HELP": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 			return `
 command [arg1] [arg2]
@@ -282,7 +325,8 @@ KEYS - Show the channels keys, or an example of them
 MAXPROCS [num] - get/set the maximum schedule-able processors
 MESSAGE [nick] [msg] - Leave a private message for a user
 MESSAGES [action]- Show your missed messages.. action if clear will remit all messages and clear the mailbox.
-NMAP [args] - run nmap with the args string
+DIG [arg1] [arg2] [arg3] - Runs dig with optional args
+NMAP [arg1] [arg2] - Runs nmap with optional args
 TIMESTAMP - Show the channels timestamp
 REDISCHECK - Test the rclient connection
 WHO - Lists tracked (current) users in the channel
