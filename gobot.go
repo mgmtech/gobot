@@ -240,14 +240,33 @@ var botCommand = map[string]map[int]func(*IrcChannelLogger, []string, *irc.Line)
             action := string(args[0])
             log.Printf("Clear all messsages? %v", action)
 
-            messagesLength, _ := ch.rclient.Llen(ch.ukey(line.Nick)+sfxMessage)
+            if strings.ToUpper(action) == "CLEAR" {
+                log.Printf("yes, clear them all")
+                messagesLength, err := ch.rclient.Llen(
+                    ch.ukey(line.Nick)+sfxMessage)
+                
+                log.Printf("%v %v", messagesLength, err)
 
-            var messages string
-            for i:= 0; i == int(messagesLength-1); i++ {
-                msg, _ := ch.rclient.Lpop(ch.ukey(line.Nick)+sfxMessage)
-                messages += fmt.Sprintf("%v. %s\n", i+1, string(msg))
+                if messagesLength == 0 {
+                    return "\n"
+                } else if messagesLength == 1 {
+                    msg, _ := ch.rclient.Lpop(ch.ukey(line.Nick)+sfxMessage)
+
+                    return fmt.Sprintf("%s", msg)
+                } else {
+                    var messages string
+                    for i:= 0; i <= int(messagesLength+1); i++ {
+                        msg, err := ch.rclient.Lpop(ch.ukey(line.Nick)+sfxMessage)
+                        log.Printf("message: %v , error: %v\n", msg, err)
+                        if err != nil {
+                            log.Printf("%v", err)
+                        }
+                        messages += fmt.Sprintf("%v. %s\n", i+1, string(msg))
+                    }
+                    return messages
+                }
             }
-            return messages
+            return "nothing to do"
         },
     },
 	"HELP": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
@@ -262,7 +281,7 @@ DIE - Immediately close the channel logger
 KEYS - Show the channels keys, or an example of them
 MAXPROCS [num] - get/set the maximum schedule-able processors
 MESSAGE [nick] [msg] - Leave a private message for a user
-MESSAGES - Show your missed messages
+MESSAGES [action]- Show your missed messages.. action if clear will remit all messages and clear the mailbox.
 NMAP [args] - run nmap with the args string
 TIMESTAMP - Show the channels timestamp
 REDISCHECK - Test the rclient connection
@@ -516,6 +535,18 @@ func (ch *IrcChannelLogger) joinChan(conn *irc.Conn, line *irc.Line) {
 	} else {
 		ch.user_left(line.Nick) // Not really but record the time anyway
 	}
+
+    userMessages, _ := ch.rclient.Llen(ch.ukey(line.Nick)+sfxMessage)
+
+    if userMessages > 1 {  
+        ch.client.Notice(line.Nick,
+            fmt.Sprintf("%s, you have %d messages waiting for you.",
+                line.Nick, int(userMessages)))  
+        } else if userMessages == 1 {
+             ch.client.Notice(line.Nick,
+                fmt.Sprintf("%s, you have a message waiting for you.", 
+                    line.Nick))
+        }  
 	/* check for users messages here based on their line nick and remit via
 	   notice message */
 }
