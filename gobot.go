@@ -63,7 +63,7 @@ func (ch *IrcChannelLogger) listentoparrot() {
 	for {
 		msg, _ := client.Recv(0)
 		log.Print("Git-parrot msg -> ", msg)
-		ch.multilineMsg(msg, ch.name)
+		ch.noticemultilineMsg(msg, ch.name)
 	}
 }
 
@@ -164,24 +164,6 @@ var botCommand = map[string]map[int]func(*IrcChannelLogger, []string, *irc.Line)
 		},
 		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { ch.client.Quit(); return "" },
 	},
-	"MESSAGE": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
-		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
-			return "MESSAGE nick msg -> Leave a private message for a user"
-		},
-		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { return "MESSAGE [nickname] msg" },
-		2: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
-            userMessages := ch.ukey(args[0])+sfxMessage
-
-            msgs,_ := ch.rclient.Llen(userMessages)
-
-            if msgs <= maxMessages {
-                log.Println("Users(%v) messages length ", msgs)
-                ch.rclient.Rpush(userMessages, []byte(args[1]))
-            }
-            return ""
-		},
-	},
-
 	"NMAP": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 			return "NMAP [nmap args] -> Run nmap with args"
@@ -211,13 +193,61 @@ var botCommand = map[string]map[int]func(*IrcChannelLogger, []string, *irc.Line)
         },
     },
 
+	"MESSAGE": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+			return "MESSAGE nick msg -> Leave a private message for a user"
+		},
+		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { return "MESSAGE [nickname] msg" },
+		2: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+            userMessages := ch.ukey(args[0])+sfxMessage
+
+            msgs,_ := ch.rclient.Llen(userMessages)
+
+            message := fmt.Sprintf(
+                "%s <-- %s (%v)", string(args[1]), 
+                string(line.Nick), time.Now().Format(msgDate)) 
+
+
+            if msgs <= maxMessages {
+                log.Println("Users(%v) messages length ", msgs)
+                ch.rclient.Rpush(userMessages, []byte(message))
+            }
+            return ""
+		},
+	},
+
 	"MESSAGES": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 			return "MESSAGES -> Show your private messages"
 		},
 		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
-            msgs, _ := ch.rclient.Lrange(ch.ukey(line.Nick)+sfxMessage, -100, 100)
-            return fmt.Sprintf("%v", msgs)
+
+            
+            msgs, _ := ch.rclient.Lrange(
+                ch.ukey(line.Nick)+sfxMessage, -100, 100)
+
+            log.Printf("%v", msgs)
+            
+            var messages string
+            for i, value := range msgs {
+
+                messages += fmt.Sprintf("%v. %s\n", i+1, string(value))
+            
+            }
+            return messages
+        },
+		1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+            action := string(args[0])
+            log.Printf("Clear all messsages? %v", action)
+
+            messagesLength, _ := ch.rclient.Llen(ch.ukey(line.Nick)+sfxMessage)
+
+            var messages string
+            for i:= 0; i == int(messagesLength-1); i++ {
+                msg, _ := ch.rclient.Lpop(ch.ukey(line.Nick)+sfxMessage)
+                messages += fmt.Sprintf("%v. %s\n", i+1, string(msg))
+            }
+            return messages
         },
     },
 	"HELP": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
@@ -228,16 +258,19 @@ command [arg1] [arg2]
 HELP - Display this help message
 HISTORY - Show all missed messages
 LASTSAW [nick] - Show users last seen timestamp
-DIE - Immediately close the channel logger (EXPERIMENTAL)
+DIE - Immediately close the channel logger 
 KEYS - Show the channels keys, or an example of them
 MAXPROCS [num] - get/set the maximum schedule-able processors
 MESSAGE [nick] [msg] - Leave a private message for a user
 MESSAGES - Show your missed messages
+NMAP [args] - run nmap with the args string
 TIMESTAMP - Show the channels timestamp
 REDISCHECK - Test the rclient connection
 WHO - Lists tracked (current) users in the channel
 VARS - Remit the local configuration parameters
-BOTS - ...`
+BOTS - ...
+WHATSMYIP - [coming soon]
+NMAPMYIP - [coming soon]`
 		},
 		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 			return "HELP command - Show help for the command."
@@ -537,7 +570,7 @@ func (ch *IrcChannelLogger) privMsg(conn *irc.Conn, line *irc.Line) {
 
 		if command != "" {
 			log.Printf("Command received: %s and arguments(%d): %s", command, len(args), args)
-			go ch.multilineMsg(ch.command(command, args, line), dest)
+			go ch.noticemultilineMsg(ch.command(command, args, line), dest)
 		}
 	} else {
 		// log the message with timestamp to rclient
