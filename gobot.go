@@ -308,9 +308,21 @@ var botCommand = map[string]map[int]func(*IrcChannelLogger, []string, *irc.Line)
             
             return fmt.Sprintf("%v", string(out))
         },
-
     },
 
+    "WHOIS": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+			return "WHOIS [arg1] -> Run whois with arg1"
+		},
+		1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { 
+            out, err := exec.Command("whois", args[0]).Output()
+            if err != nil {
+                log.Fatal(err)
+            }
+            
+            return fmt.Sprintf("%v", string(out))
+        },
+    },
 
     "HELP": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
@@ -327,6 +339,7 @@ MESSAGE [nick] [msg] - Leave a private message for a user
 MESSAGES [action]- Show your missed messages.. action if clear will remit all messages and clear the mailbox.
 DIG [arg1] [arg2] [arg3] - Runs dig with optional args
 NMAP [arg1] [arg2] - Runs nmap with optional args
+WHOIS [arg1] - preform a WHOIS lookup
 TIMESTAMP - Show the channels timestamp
 REDISCHECK - Test the rclient connection
 WHO - Lists tracked (current) users in the channel
