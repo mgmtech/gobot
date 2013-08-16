@@ -39,6 +39,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+    "runtime"
+    "os/exec"
 )
 
 import redis "github.com/alphazero/Go-Redis"
@@ -103,9 +105,6 @@ type IrcChannelLogger struct {
 /* rclient key helpers */
 func (ch *IrcChannelLogger) rkey() string            { return fmt.Sprintf("%s:%d:%s", ch.host, ch.port, ch.name) }
 func (ch *IrcChannelLogger) ukey(user string) string { return fmt.Sprintf("%s:%s", ch.rkey(), user) }
-func (ch *IrcChannelLogger) messageKey(user string, message string) string {
-	return fmt.Sprintf("%s:%s:%s", ch.rkey(), user, message)
-}
 
 /*
 Bot commands and contextual help map
@@ -170,10 +169,57 @@ var botCommand = map[string]map[int]func(*IrcChannelLogger, []string, *irc.Line)
 			return "MESSAGE nick msg -> Leave a private message for a user"
 		},
 		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { return "MESSAGE [nickname] msg" },
-		1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
-			return "Actually leave a message for someone" /* store the message up to MAX_MESSAGE in redis que for user */
+		2: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+            userMessages := ch.ukey(args[0])+sfxMessage
+
+            msgs,_ := ch.rclient.Llen(userMessages)
+
+            if msgs <= maxMessages {
+                log.Println("Users(%v) messages length ", msgs)
+                ch.rclient.Rpush(userMessages, []byte(args[1]))
+            }
+            return ""
 		},
 	},
+
+	"NMAP": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+			return "NMAP [nmap args] -> Run nmap with args"
+		},
+		2: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { 
+            out, err := exec.Command("nmap", args[1]).Output()
+            if err != nil {
+                log.Fatal(err)
+            }
+            return fmt.Sprintf("%s", out)
+        },
+    },
+
+	"MAXPROCS": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+			return "MAXPROCS -> Show maximum processors available"
+		},
+		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { 
+            return fmt.Sprintf("Maximum processors available:%d, current GOPROCMAX settings is %d", runtime.NumCPU(), 
+                runtime.GOMAXPROCS(0))
+        },
+		1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+
+	        num, _ := strconv.ParseInt(string(args[0]), 10, 32)
+            return fmt.Sprintf("%v", runtime.GOMAXPROCS(int(num)))
+
+        },
+    },
+
+	"MESSAGES": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+			return "MESSAGES -> Show your private messages"
+		},
+		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+            msgs, _ := ch.rclient.Lrange(ch.ukey(line.Nick)+sfxMessage, -100, 100)
+            return fmt.Sprintf("%v", msgs)
+        },
+    },
 	"HELP": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 			return `
@@ -184,7 +230,9 @@ HISTORY - Show all missed messages
 LASTSAW [nick] - Show users last seen timestamp
 DIE - Immediately close the channel logger (EXPERIMENTAL)
 KEYS - Show the channels keys, or an example of them
+MAXPROCS [num] - get/set the maximum schedule-able processors
 MESSAGE [nick] [msg] - Leave a private message for a user
+MESSAGES - Show your missed messages
 TIMESTAMP - Show the channels timestamp
 REDISCHECK - Test the rclient connection
 WHO - Lists tracked (current) users in the channel
