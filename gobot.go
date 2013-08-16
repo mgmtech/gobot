@@ -77,10 +77,12 @@ const (
 	names        = "NAMES"
 
 	// rclient key suffixes
-	sfxLast  = ":lastseen"
-	sfxStart = ":starttime"
+	sfxLast    = ":lastseen"
+	sfxStart   = ":starttime"
+	sfxMessage = ":messages"
 
-	msgDate = "1/2/06 15:04:05"
+	msgDate     = "1/2/06 15:04:05"
+	maxMessages = 10
 )
 
 type IrcChannelLogger struct {
@@ -93,14 +95,17 @@ type IrcChannelLogger struct {
 	listen      bool   // Listen for commands
 	initialized bool   // Channel initialized?
 
-	client *irc.Conn    // The IRC Client for the channel
-	rclient  redis.Client // The rclient client connection
-	done   chan bool    // A channel to signal close
+	client  *irc.Conn    // The IRC Client for the channel
+	rclient redis.Client // The rclient client connection
+	done    chan bool    // A channel to signal close
 }
 
 /* rclient key helpers */
 func (ch *IrcChannelLogger) rkey() string            { return fmt.Sprintf("%s:%d:%s", ch.host, ch.port, ch.name) }
 func (ch *IrcChannelLogger) ukey(user string) string { return fmt.Sprintf("%s:%s", ch.rkey(), user) }
+func (ch *IrcChannelLogger) messageKey(user string, message string) string {
+	return fmt.Sprintf("%s:%s:%s", ch.rkey(), user, message)
+}
 
 /*
 Bot commands and contextual help map
@@ -121,20 +126,20 @@ var botCommand = map[string]map[int]func(*IrcChannelLogger, []string, *irc.Line)
 	},
 	"BOTS": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
-            return "BOTS - :ninja:"
+			return "BOTS - :ninja:"
 		},
 		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
-            return fmt.Sprintf("%v", ":#")
-            //bots.Registry) // their the mots
+			return fmt.Sprintf("%v", ":#")
+			//bots.Registry) // their the mots
 		},
 	},
 	"WHO": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
-            return "WHO - :neckbeard:"
+			return "WHO - :neckbeard:"
 		},
 		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
-            return fmt.Sprintf("%v", ch.client.ST.GetChannel(ch.name).NicksStr())
-            //bots.Registry) // their the mots
+			return fmt.Sprintf("%v", ch.client.ST.GetChannel(ch.name).NicksStr())
+			//bots.Registry) // their the mots
 		},
 	},
 	"KEYS": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
@@ -160,16 +165,26 @@ var botCommand = map[string]map[int]func(*IrcChannelLogger, []string, *irc.Line)
 		},
 		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { ch.client.Quit(); return "" },
 	},
+	"MESSAGE": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+			return "MESSAGE nick msg -> Leave a private message for a user"
+		},
+		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { return "MESSAGE [nickname] msg" },
+		1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+			return "Actually leave a message for someone" /* store the message up to MAX_MESSAGE in redis que for user */
+		},
+	},
 	"HELP": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 			return `
 command [arg1] [arg2]
 --------------------------------
 HELP - Display this help message
-HISTORY - Show users last 20 messages
-LASTSAW - Show users last seen timestamp
+HISTORY - Show all missed messages
+LASTSAW [nick] - Show users last seen timestamp
 DIE - Immediately close the channel logger (EXPERIMENTAL)
 KEYS - Show the channels keys, or an example of them
+MESSAGE [nick] [msg] - Leave a private message for a user
 TIMESTAMP - Show the channels timestamp
 REDISCHECK - Test the rclient connection
 WHO - Lists tracked (current) users in the channel
@@ -224,7 +239,6 @@ BOTS - ...`
 				time.Now().Unix(), ch.time, ch.timestamp(), ch.timestamp()/60)
 		},
 	},
-
 }
 
 func (ch *IrcChannelLogger) user_left(user string) {
@@ -421,7 +435,8 @@ func (ch *IrcChannelLogger) joinChan(conn *irc.Conn, line *irc.Line) {
 	} else {
 		ch.user_left(line.Nick) // Not really but record the time anyway
 	}
-
+	/* check for users messages here based on their line nick and remit via
+	   notice message */
 }
 
 func (ch *IrcChannelLogger) connectIRC(conn *irc.Conn, line *irc.Line) {
@@ -431,7 +446,7 @@ func (ch *IrcChannelLogger) connectIRC(conn *irc.Conn, line *irc.Line) {
 
 func (ch *IrcChannelLogger) privMsg(conn *irc.Conn, line *irc.Line) {
 	cli, _ := redis.NewSynchClient()
-    ch.rclient = cli
+	ch.rclient = cli
 
 	source := line.Args[0]
 	parts := strings.Fields(line.Args[1])
@@ -476,13 +491,13 @@ func (ch *IrcChannelLogger) privMsg(conn *irc.Conn, line *irc.Line) {
 			log.Printf("Command received: %s and arguments(%d): %s", command, len(args), args)
 			go ch.multilineMsg(ch.command(command, args, line), dest)
 		}
-	} else { 
-        	// log the message with timestamp to rclient
-        ch.rclient.Zadd(ch.rkey(), float64(
-            ch.timestamp()), []byte(fmt.Sprintf(
-            "%v> %s: %s", time.Now().Format(msgDate),
-            line.Nick, line.Args[1])))
-    }
+	} else {
+		// log the message with timestamp to rclient
+		ch.rclient.Zadd(ch.rkey(), float64(
+			ch.timestamp()), []byte(fmt.Sprintf(
+			"%v> %s: %s", time.Now().Format(msgDate),
+			line.Nick, line.Args[1])))
+	}
 }
 
 func main() {
