@@ -36,11 +36,12 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
-    "runtime"
-    "os/exec"
+    "net/http"
 )
 
 import redis "github.com/alphazero/Go-Redis"
@@ -69,7 +70,9 @@ func (ch *IrcChannelLogger) listentoparrot() {
 
 const (
 	// bots
-	botname string = "GoBot"
+	publicdns        = "gobot.dyndns.org"
+	whatsmyip        = 8666
+	botname   string = "GoBot"
 
 	// irc commands
 	join  string = "JOIN"
@@ -165,21 +168,21 @@ var botCommand = map[string]map[int]func(*IrcChannelLogger, []string, *irc.Line)
 		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { ch.client.Quit(); return "" },
 	},
 
-    "MAXPROCS": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+	"MAXPROCS": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 			return "MAXPROCS -> Show maximum processors available"
 		},
-		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { 
-            return fmt.Sprintf("Maximum processors available:%d, current GOPROCMAX settings is %d", runtime.NumCPU(), 
-                runtime.GOMAXPROCS(0))
-        },
+		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+			return fmt.Sprintf("Maximum processors available:%d, current GOPROCMAX settings is %d", runtime.NumCPU(),
+				runtime.GOMAXPROCS(0))
+		},
 		1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 
-	        num, _ := strconv.ParseInt(string(args[0]), 10, 32)
-            return fmt.Sprintf("%v", runtime.GOMAXPROCS(int(num)))
+			num, _ := strconv.ParseInt(string(args[0]), 10, 32)
+			return fmt.Sprintf("%v", runtime.GOMAXPROCS(int(num)))
 
-        },
-    },
+		},
+	},
 
 	"MESSAGE": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
@@ -187,20 +190,25 @@ var botCommand = map[string]map[int]func(*IrcChannelLogger, []string, *irc.Line)
 		},
 		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { return "MESSAGE [nickname] msg" },
 		2: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
-            userMessages := ch.ukey(args[0])+sfxMessage
+			userMessages := ch.ukey(args[0]) + sfxMessage
 
-            msgs,_ := ch.rclient.Llen(userMessages)
+			msgs, _ := ch.rclient.Llen(userMessages)
 
-            message := fmt.Sprintf(
-                "%s <-- %s (%v)", string(args[1]), 
-                string(line.Nick), time.Now().Format(msgDate)) 
-
-
-            if msgs <= maxMessages {
-                log.Println("Users(%v) messages length ", msgs)
-                ch.rclient.Rpush(userMessages, []byte(message))
+            msg := args[1]
+            if len(args) > 2 {
+                for _, word := range(args[2:]) {
+                    msg += fmt.Sprintf(" %s", string(word))
+                }
             }
-            return ""
+			message := fmt.Sprintf(
+                "%s <-- %s (%v)", string(msg),
+				string(line.Nick), time.Now().Format(msgDate))
+
+			if msgs <= maxMessages {
+				log.Println("Users(%v) messages length ", msgs)
+				ch.rclient.Rpush(userMessages, []byte(message))
+			}
+			return ""
 		},
 	},
 
@@ -210,121 +218,128 @@ var botCommand = map[string]map[int]func(*IrcChannelLogger, []string, *irc.Line)
 		},
 		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 
-            
-            msgs, _ := ch.rclient.Lrange(
-                ch.ukey(line.Nick)+sfxMessage, -100, 100)
+			msgs, _ := ch.rclient.Lrange(
+				ch.ukey(line.Nick)+sfxMessage, -100, 100)
 
-            log.Printf("%v", msgs)
-            
-            var messages string
-            for i, value := range msgs {
+			log.Printf("%v", msgs)
 
-                messages += fmt.Sprintf("%v. %s\n", i+1, string(value))
-            
-            }
-            return messages
-        },
+			var messages string
+			for i, value := range msgs {
+
+				messages += fmt.Sprintf("%v. %s\n", i+1, string(value))
+
+			}
+			return messages
+		},
 		1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
-            action := string(args[0])
-            log.Printf("Clear all messsages? %v", action)
+			action := string(args[0])
+			log.Printf("Clear all messsages? %v", action)
 
-            if strings.ToUpper(action) == "CLEAR" {
-                log.Printf("yes, clear them all")
-                messagesLength, err := ch.rclient.Llen(
-                    ch.ukey(line.Nick)+sfxMessage)
-                
-                log.Printf("%v %v", messagesLength, err)
+			if strings.ToUpper(action) == "CLEAR" {
+				log.Printf("yes, clear them all")
+				messagesLength, err := ch.rclient.Llen(
+					ch.ukey(line.Nick) + sfxMessage)
 
-                if messagesLength == 0 {
-                    return "\n"
-                } else if messagesLength == 1 {
-                    msg, _ := ch.rclient.Lpop(ch.ukey(line.Nick)+sfxMessage)
+				log.Printf("%v %v", messagesLength, err)
 
-                    return fmt.Sprintf("%s", msg)
-                } else {
-                    var messages string
-                    for i:= 0; i <= int(messagesLength+1); i++ {
-                        msg, err := ch.rclient.Lpop(ch.ukey(line.Nick)+sfxMessage)
-                        log.Printf("message: %v , error: %v\n", msg, err)
-                        if err != nil {
-                            log.Printf("%v", err)
-                        }
-                        messages += fmt.Sprintf("%v. %s\n", i+1, string(msg))
-                    }
-                    return messages
-                }
-            }
-            return "nothing to do"
-        },
-    },
-	
-    "NMAP": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+				if messagesLength == 0 {
+					return "\n"
+				} else if messagesLength == 1 {
+					msg, _ := ch.rclient.Lpop(ch.ukey(line.Nick) + sfxMessage)
+
+					return fmt.Sprintf("%s", msg)
+				} else {
+					var messages string
+					for i := 0; i <= int(messagesLength+1); i++ {
+						msg, err := ch.rclient.Lpop(ch.ukey(line.Nick) + sfxMessage)
+						log.Printf("message: %v , error: %v\n", msg, err)
+						if err != nil {
+							log.Printf("%v", err)
+						}
+						messages += fmt.Sprintf("%v. %s\n", i+1, string(msg))
+					}
+					return messages
+				}
+			}
+			return "nothing to do"
+		},
+	},
+
+	"NMAP": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 			return "NMAP [nmap args] -> Run nmap with args"
 		},
-		1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { 
-            out, err := exec.Command("nmap", args[0]).Output()
-            if err != nil {
-                log.Fatal(err)
-            }
-            
-            return fmt.Sprintf("%v", string(out))
-        },
-		2: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { 
-            out, err := exec.Command("nmap", args[0], args[1]).Output()
-            if err != nil {
-                log.Fatal(err)
-            }
-            
-            return fmt.Sprintf("%v", string(out))
-        },
+		1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+			out, err := exec.Command("nmap", args[0]).Output()
+			if err != nil {
+				log.Fatal(err)
+			}
 
-    },
-    "DIG": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+			return fmt.Sprintf("%v", string(out))
+		},
+		2: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+			out, err := exec.Command("nmap", args[0], args[1]).Output()
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			return fmt.Sprintf("%v", string(out))
+		},
+	},
+	"DIG": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 			return "DIG [arg0] [arg1] [arg2]-> Runs dig with args"
 		},
-		1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { 
-            out, err := exec.Command("dig", args[0]).Output()
-            if err != nil {
-                log.Fatal(err)
-            }
-            
-            return fmt.Sprintf("%v", string(out))
-        },
-		2: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { 
-            out, err := exec.Command("dig", args[0], args[1]).Output()
-            if err != nil {
-                log.Fatal(err)
-            }
-            
-            return fmt.Sprintf("%v", string(out))
-        },
-		3: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { 
-            out, err := exec.Command("dig", args[0], args[1], args[2]).Output()
-            if err != nil {
-                log.Fatal(err)
-            }
-            
-            return fmt.Sprintf("%v", string(out))
-        },
-    },
+		1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+			out, err := exec.Command("dig", args[0]).Output()
+			if err != nil {
+				log.Fatal(err)
+			}
 
-    "WHOIS": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+			return fmt.Sprintf("%v", string(out))
+		},
+		2: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+			out, err := exec.Command("dig", args[0], args[1]).Output()
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			return fmt.Sprintf("%v", string(out))
+		},
+		3: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+			out, err := exec.Command("dig", args[0], args[1], args[2]).Output()
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			return fmt.Sprintf("%v", string(out))
+		},
+	},
+	"WHATSMYIP": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+			return "WHATSMYIP -> Returns a url to help gobot figure that out"
+		},
+		0: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+
+			return fmt.Sprintf("http://%v:%d", publicdns, whatsmyip)
+		},
+	},
+
+	"WHOIS": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 			return "WHOIS [arg1] -> Run whois with arg1"
 		},
-		1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { 
-            out, err := exec.Command("whois", args[0]).Output()
-            if err != nil {
-                log.Fatal(err)
-            }
-            
-            return fmt.Sprintf("%v", string(out))
-        },
-    },
+		1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+			out, err := exec.Command("whois", args[0]).Output()
+			if err != nil {
+				log.Fatal(err)
+			}
 
-    "HELP": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+			return fmt.Sprintf("%v", string(out))
+		},
+	},
+
+	"HELP": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 			return `
 command [arg1] [arg2]
@@ -468,7 +483,9 @@ func (ch *IrcChannelLogger) command(command string, args []string, line *irc.Lin
 	if cmdok != true {
 		return fmt.Sprintf(
 			"Uknown command %s \n %s", command, botCommand["HELP"][0](ch, []string{}, line))
-	} else if argok != true {
+	} else if argok != true && command == "MESSAGE" {
+        // do nothing
+    } else if argok != true {
 		return fmt.Sprintf(
 			"Wrong Number of arguments. \n %s", botCommand[command][-1](ch, []string{}, line))
 	}
@@ -483,10 +500,15 @@ func (ch *IrcChannelLogger) command(command string, args []string, line *irc.Lin
 			log.Print("Displaying HELP for command ", args[0])
 			return botCommand[strings.ToUpper(args[0])][-1](ch, []string{}, line)
 		}
-
 	}
 
-	rMsg := botCommand[command][len(args)](ch, args, line)
+    var rMsg string
+
+    if command == "MESSAGE" && len(args) > 2 {
+        rMsg = botCommand[command][2](ch, args, line)
+    } else {
+        rMsg = botCommand[command][len(args)](ch, args, line)
+    }
 
 	log.Printf("Received (%s) from command %s with args %s", rMsg, command, args)
 
@@ -593,17 +615,17 @@ func (ch *IrcChannelLogger) joinChan(conn *irc.Conn, line *irc.Line) {
 		ch.user_left(line.Nick) // Not really but record the time anyway
 	}
 
-    userMessages, _ := ch.rclient.Llen(ch.ukey(line.Nick)+sfxMessage)
+	userMessages, _ := ch.rclient.Llen(ch.ukey(line.Nick) + sfxMessage)
 
-    if userMessages > 1 {  
-        ch.client.Notice(line.Nick,
-            fmt.Sprintf("%s, you have %d messages waiting for you.",
-                line.Nick, int(userMessages)))  
-        } else if userMessages == 1 {
-             ch.client.Notice(line.Nick,
-                fmt.Sprintf("%s, you have a message waiting for you.", 
-                    line.Nick))
-        }  
+	if userMessages > 1 {
+		ch.client.Notice(line.Nick,
+			fmt.Sprintf("%s, you have %d messages waiting for you.",
+				line.Nick, int(userMessages)))
+	} else if userMessages == 1 {
+		ch.client.Notice(line.Nick,
+			fmt.Sprintf("%s, you have a message waiting for you.",
+				line.Nick))
+	}
 	/* check for users messages here based on their line nick and remit via
 	   notice message */
 }
@@ -683,7 +705,17 @@ func main() {
 	}
 
 	//bots.Start()
+    
+    http.HandleFunc("/",
+		func(w http.ResponseWriter, r *http.Request) {
+            msg := fmt.Sprintf("Raw request data: %v", r)
+            cc.multilineMsg(msg, "#flashnotes-dev")
+		})
+
+
+
 
 	go cc.listentoparrot()
-	cc.start()
+	go cc.start()
+	log.Fatal(http.ListenAndServe(":8666", nil))
 }
