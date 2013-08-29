@@ -184,6 +184,33 @@ var botCommand = map[string]map[int]func(*IrcChannelLogger, []string, *irc.Line)
 		},
 	},
 
+/*	"BROAD": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+			return "BROAD nick msg ->  message everyone"
+		},
+		1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { 
+        //    return "MESSAGE [nickname] msg" 
+            msgs, _ := ch.rclient.Llen(userMessages)
+
+                msg := args[1]
+                if len(args) > 2 {
+                    for _, word := range(args[2:]) {
+                        msg += fmt.Sprintf(" %s", string(word))
+                    }
+                }
+                message := fmt.Sprintf(
+                    "%s <-- %s (%v)", string(msg),
+                    string(line.Nick), time.Now().Format(msgDate))
+
+                if msgs <= maxMessages {
+                    log.Println("Users(%v) messages length ", msgs)
+                    ch.rclient.Rpush(userMessages, []byte(message))
+                }
+                return ""
+            },
+        },
+*/
+
 	"MESSAGE": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
 		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 			return "MESSAGE nick msg -> Leave a private message for a user"
@@ -331,6 +358,19 @@ var botCommand = map[string]map[int]func(*IrcChannelLogger, []string, *irc.Line)
 		},
 		1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
 			out, err := exec.Command("whois", args[0]).Output()
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			return fmt.Sprintf("%v", string(out))
+		},
+	},
+	"PING": map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
+		-1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+			return "PING [arg1] -> Pings a host indefinitely"
+		},
+		1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string {
+			out, err := exec.Command("ping", "-c 4", args[0]).Output()
 			if err != nil {
 				log.Fatal(err)
 			}
