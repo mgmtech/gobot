@@ -41,7 +41,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-    "net/http"
+    //"net/http"
 )
 
 import redis "github.com/alphazero/Go-Redis"
@@ -54,6 +54,7 @@ import irc "github.com/fluffle/goirc/client"
 
 // use of interfaces methods, solve the issue of importing bots here!
 import parrot "github.com/mgmtech/gobots/parrot"
+import myip "github.com/mgmtech/gobots/myip"
 
 func (ch *IrcChannelLogger) listentoparrot() {
 
@@ -64,6 +65,19 @@ func (ch *IrcChannelLogger) listentoparrot() {
 	for {
 		msg, _ := client.Recv(0)
 		log.Print("Git-parrot msg -> ", msg)
+		ch.noticemultilineMsg(msg, ch.name)
+	}
+}
+
+func (ch *IrcChannelLogger) listentomyip() {
+
+	client := myip.CliStart() // bots.Roster["parrot"].CliStart()
+	defer client.Close()
+	//log.Print("conntecting to ", bots.Registry["parrot"].Bend)
+
+	for {
+		msg, _ := client.Recv(0)
+		log.Print("My-Ip msg -> ", msg)
 		ch.noticemultilineMsg(msg, ch.name)
 	}
 }
@@ -745,17 +759,17 @@ func main() {
 	}
 
 	//bots.Start()
-    
-    http.HandleFunc("/",
+    // XXX: Make this use channels and a for/slect 
+
+/*    http.HandleFunc("/",
 		func(w http.ResponseWriter, r *http.Request) {
             msg := fmt.Sprintf("Raw request data: %v", r)
             cc.multilineMsg(msg, "#flashnotes-dev")
 		})
-
-
-
+*/
 
 	go cc.listentoparrot()
+	go cc.listentomyip()
 	go cc.start()
-	log.Fatal(http.ListenAndServe(":8666", nil))
+//	log.Fatal(http.ListenAndServe(":8666", nil))
 }
