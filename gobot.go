@@ -768,8 +768,8 @@ func main() {
 		})
 */
 
-	go cc.listentoparrot()
-	go cc.listentomyip()
-	go cc.start()
+//	go cc.listentoparrot()
+//	go cc.listentomyip()
+	 cc.start()
 //	log.Fatal(http.ListenAndServe(":8666", nil))
 }
