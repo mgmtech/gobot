@@ -50,7 +50,7 @@ import irc "github.com/fluffle/goirc/client"
 
 // TODO: implement interfaces which use multi-methods? possible?
 
-//import bots "github.com/mgmtech/gobots"
+import bots "github.com/mgmtech/gobots"
 
 // use of interfaces methods, solve the issue of importing bots here!
 import parrot "github.com/mgmtech/gobots/parrot"
@@ -758,8 +758,8 @@ func main() {
 		done:   make(chan bool),
 	}
 
-	//bots.Start()
-    // XXX: Make this use channels and a for/slect 
+	bots.Start()
+    // XXX: leverage channels and a for slect loop 
 
 /*    http.HandleFunc("/",
 		func(w http.ResponseWriter, r *http.Request) {
@@ -768,8 +768,8 @@ func main() {
 		})
 */
 
-//	go cc.listentoparrot()
-//	go cc.listentomyip()
-	 cc.start()
+	go cc.listentoparrot()
+	go cc.listentomyip()
+        cc.start()
 //	log.Fatal(http.ListenAndServe(":8666", nil))
 }
