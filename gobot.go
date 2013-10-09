@@ -126,8 +126,12 @@ func (ch *IrcChannelLogger) ukey(user string) string { return fmt.Sprintf("%s:%s
 /*
 Bot commands and contextual help map
 
-Commands are structured in a map[string][int] of functions which return a string.
--1 index is for the help message, the rest correspond to the number of arguments for the command.
+Commands are structured in a map[cmdStr][argsInt] of functions which return a string.
+
+cmdStr - the botcommand which occurs either after speaking to GoBot directly via PM or in the channel by addressing it.
+argsInt- Integer representing the number of options after the command string.
+    -1 index is for the help message, the rest correspond to the number of arguments for the command.
+    * be very explicit dealing with args and whatchout when running gobot as a service as you should jail it to avoid unintended consequences (i.e. this is not battle-tested/mother-approved)
 
 */
 var botCommand = map[string]map[int]func(*IrcChannelLogger, []string, *irc.Line) string{
@@ -203,25 +207,11 @@ var botCommand = map[string]map[int]func(*IrcChannelLogger, []string, *irc.Line)
 			return "BROAD nick msg ->  message everyone"
 		},
 		1: func(ch *IrcChannelLogger, args []string, line *irc.Line) string { 
-        //    return "MESSAGE [nickname] msg" 
-            msgs, _ := ch.rclient.Llen(userMessages)
-
-                msg := args[1]
-                if len(args) > 2 {
-                    for _, word := range(args[2:]) {
-                        msg += fmt.Sprintf(" %s", string(word))
-                    }
-                }
-                message := fmt.Sprintf(
-                    "%s <-- %s (%v)", string(msg),
-                    string(line.Nick), time.Now().Format(msgDate))
-
-                if msgs <= maxMessages {
-                    log.Println("Users(%v) messages length ", msgs)
-                    ch.rclient.Rpush(userMessages, []byte(message))
-                }
-                return ""
-            },
+                    
+                // iterate the list of users here via the who command and 
+                // issue a message command to them with the message
+                
+                },
         },
 */
 
