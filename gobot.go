@@ -656,7 +656,9 @@ func (ch *IrcChannelLogger) joinChan(conn *irc.Conn, line *irc.Line) {
 		ch.recTime(conn)
 		ch.initialized = true
 	} else {
-		ch.user_left(line.Nick) // Not really but record the time anyway
+            
+	    /* user_last_seen is based on when the user last left the channel by recording an update here a user cannot see any relevant history (add a history command that accepts params) */
+            //ch.user_left(line.Nick) // Not really but record the time anyway
 	}
 
 	userMessages, _ := ch.rclient.Llen(ch.ukey(line.Nick) + sfxMessage)
